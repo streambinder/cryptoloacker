@@ -9,41 +9,54 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+#include "server.h"
 #include "threadpool.h"
 
-#define DEFAULT_PORT 8888
-
-char tmp_log_string[100];
-
-void printer(char message[]) {
-        printf("SERVER: %s\n", message);
-}
+threadpool thpool;
+char aux_log[100];
 
 int create_socket(int port) {
-        printer("Allocating variables.");
-        int sock, error;
+        std_out("Allocating variables.");
+        int sock, status;
         struct sockaddr_in sock_conf;
 
-        sprintf(tmp_log_string, "Initializing socket on 0.0.0.0:%d", port);
-        printer(tmp_log_string);
+        sprintf(aux_log, "Initializing socket on 0.0.0.0:%d", port);
+        std_out(aux_log);
         sock = socket(AF_INET, SOCK_STREAM, 0);
+        int enable = 1;
+        if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
+                std_err("setsockopt(SO_REUSEADDR) failed.");
+        }
+
         sock_conf.sin_family = AF_INET;
         sock_conf.sin_addr.s_addr = INADDR_ANY;
         sock_conf.sin_port = htons(port);
 
-        error = fcntl(sock, F_SETFL, O_NONBLOCK);
+        status = fcntl(sock, F_SETFL, O_NONBLOCK);
+        if (status != 0) {
+                sprintf(aux_log, "Error %d manipulating socket file descriptor.", status);
+                std_err(aux_log);
+        }
 
-        printer("Binding socket.");
-        error = bind(sock,(struct sockaddr*) &sock_conf, sizeof(sock_conf));
+        std_out("Binding socket.");
+        status = bind(sock,(struct sockaddr*) &sock_conf, sizeof(sock_conf));
+        if (status != 0) {
+                sprintf(aux_log, "Error %d binding socket.", status);
+                std_err(aux_log);
+        }
 
-        printer("Listening for connection.");
-        error = listen(sock, 10);
+        std_out("Listening for connection.");
+        status = listen(sock, 10);
+        if (status != 0) {
+                sprintf(aux_log, "Error %d making socket listening.", status);
+                std_err(aux_log);
+        }
 
         return sock;
 }
 
 void close_socket(int sock) {
-        printer("Closing socket.");
+        std_out("Closing socket.");
         close(sock);
         return;
 }
@@ -54,20 +67,31 @@ void handle_connection(int sock) {
         buffer[512] = "\0";
         for (;; ) {
                 if ((packet_length = read(sock, buffer, 512)) < 0) {
-                        printer("Unable to read message.");
+                        std_out("Unable to read message.");
                 } else {
+                        // clean buffer (not on packet)
                         for (int index = packet_length-2; index < 512; index++) {
                                 buffer[index] = 0;
                         }
 
-                        sprintf(tmp_log_string, "Message received (%d): %s", packet_length, buffer);
-                        printer(tmp_log_string);
+                        sprintf(aux_log, "Message received (%d): %s", packet_length, buffer);
+                        std_out(aux_log);
 
-                        if (strcmp(buffer, "exit") == 0) {
-                                printer("Exit asked. Quitting.");
+                        // trap command a reduce it to lowercase
+                        char *command = strtok(buffer, " ");
+                        for(int i = 0; command[i]; i++) {
+                                command[i] = tolower(command[i]);
+                        }
+                        sprintf(aux_log, "Trapped %s command.", command);
+                        std_out(aux_log);
+
+                        if (strcmp(command, CMD_EXIT) == 0) {
+                                std_out("Exit asked. Quitting.");
                                 close_socket(sock);
                                 break;
                         }
+
+                        // buffer cleanup
                         for (int index = 0; index < 512; index++) {
                                 buffer[index] = 0;
                         }
@@ -78,28 +102,30 @@ void handle_connection(int sock) {
 int main(int argc, char *argv[]) {
         char *arg_folder;
         int arg_port = 0;
+        int arg_threads = 0;
         int opt = 0;
 
-        while ((opt = getopt(argc, argv, "c:p:")) != -1) {
+        while ((opt = getopt(argc, argv, "c:p:n:")) != -1) {
                 switch(opt) {
                 case 'c':
                         arg_folder = optarg;
                         break;
                 case 'n':
+                        arg_threads = optarg;
                         break;
                 case 'p':
                         if (!isdigit(*optarg)) {
-                                printer("'-p' input must be an integer parseable value.");
+                                std_out("'-p' input must be an integer parseable value.");
                                 exit(EXIT_FAILURE);
                         }
                         arg_port = atoi(optarg);
                         break;
                 case '?':
                         if (optopt == 'c' || optopt == 'p') {
-                                sprintf(tmp_log_string, "Missing '-%c' mandatory input.", optopt);
-                                printer(tmp_log_string);
+                                sprintf(aux_log, "Missing '-%c' mandatory input.", optopt);
+                                std_out(aux_log);
                         } else {
-                                printer("Invalid option received.");
+                                std_out("Invalid option received.");
                         }
                         exit(EXIT_FAILURE);
                         break;
@@ -119,25 +145,29 @@ int main(int argc, char *argv[]) {
                 }
         }
         if (!arg_folder_exist) {
-                printer("'-c' input must be an existing filesystem path.");
+                std_out("'-c' input must be an existing filesystem path.");
                 exit(EXIT_FAILURE);
         }
-
         if (arg_port == 0) {
-                arg_port = DEFAULT_PORT;
+                arg_port = CFG_DEFAULT_PORT;
         }
-        sprintf(tmp_log_string, "Config => port=%d, folder=%s", arg_port, arg_folder);
-        printer(tmp_log_string);
+        if (arg_threads == 0) {
+                arg_threads = CFG_DEFAULT_THREADS;
+        }
 
-        printer("Creating threadpool.");
-        threadpool thpool = thpool_init(4);
+        sprintf(aux_log, "Config { port=%d, folder=\"%s\", threads=%d }", arg_port, arg_folder, arg_threads);
+        std_out(aux_log);
+
+        sprintf(aux_log, "Creating threadpool by %d.", arg_threads);
+        std_out(aux_log);
+        thpool = thpool_init(arg_threads);
 
         int sock_descriptor, sock_new;
         int exit_condition = 0;
 
         sock_descriptor = create_socket(arg_port);
 
-        printer("Attendo connessioni.");
+        std_out("Waiting for connections.");
         for (;; ) {
                 if ((sock_new = accept(sock_descriptor, 0, 0)) != -1) {
                         handle_connection(sock_new);
@@ -146,7 +176,7 @@ int main(int argc, char *argv[]) {
 
         close_socket(sock_new);
         close_socket(sock_descriptor);
-        printer("Terminato.");
+        std_out("Exited.");
 
         return 0;
 }
