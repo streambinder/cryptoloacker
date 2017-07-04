@@ -36,13 +36,12 @@
 .DEFAULT_GOAL = all
 
 ifeq ($(OS),Windows_NT)
-	include Makefile.windows
+	PLATFORM=windows
 else
-	include Makefile.linux
+	PLATFORM=linux
 endif
 
 ABSPATH=${CURDIR}
-# ABSPATH=.
 
 CDIR=$(ABSPATH)/src/$(PLATFORM)
 IDIR=$(CDIR)/include
@@ -50,7 +49,7 @@ BDIR=$(ABSPATH)/bin/$(PLATFORM)
 ODIR=$(ABSPATH)/obj/$(PLATFORM)
 
 CC=gcc
-CFLAGS=-I$(IDIR)
+CFLAGS=-I$(IDIR) -lpthread
 
 prepare:
 	@mkdir -p {$(BDIR),$(ODIR)}
@@ -58,7 +57,7 @@ prepare:
 $(ODIR)/%.o: $(CDIR)/%.c prepare
 	$(CC) -g -O -c -o $@ $< $(CFLAGS)
 
-server: $(ODIR)/server.o
+server: $(ODIR)/server.o $(ODIR)/threadpool.o
 	gcc -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
 
 client: $(ODIR)/client.o
