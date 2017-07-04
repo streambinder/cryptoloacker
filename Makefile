@@ -10,8 +10,11 @@ ABSPATH=${CURDIR}
 
 CDIR=$(ABSPATH)/src/$(PLATFORM)
 IDIR=$(CDIR)/include
-BDIR=$(ABSPATH)/bin/$(PLATFORM)
-ODIR=$(ABSPATH)/obj/$(PLATFORM)
+
+PRE_BDIR=$(ABSPATH)/bin
+PRE_ODIR=$(ABSPATH)/obj
+BDIR=$(PRE_BDIR)/$(PLATFORM)
+ODIR=$(PRE_ODIR)/$(PLATFORM)
 
 CC=gcc
 CFLAGS=-I$(IDIR) -lpthread
@@ -31,4 +34,4 @@ client: $(ODIR)/client.o
 all: server client
 
 clean:
-	@rm -rf $(BDIR) $(ODIR)
+	@rm -rf $(PRE_BDIR) $(PRE_ODIR)
