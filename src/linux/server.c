@@ -9,6 +9,8 @@
 #include <sys/stat.h>
 #include <errno.h>
 
+#include "threadpool.h"
+
 #define DEFAULT_PORT 8888
 
 char tmp_log_string[100];
@@ -83,6 +85,8 @@ int main(int argc, char *argv[]) {
                 case 'c':
                         arg_folder = optarg;
                         break;
+                case 'n':
+                        break;
                 case 'p':
                         if (!isdigit(*optarg)) {
                                 printer("'-p' input must be an integer parseable value.");
@@ -124,6 +128,9 @@ int main(int argc, char *argv[]) {
         }
         sprintf(tmp_log_string, "Config => port=%d, folder=%s", arg_port, arg_folder);
         printer(tmp_log_string);
+
+        printer("Creating threadpool.");
+        threadpool thpool = thpool_init(4);
 
         int sock_descriptor, sock_new;
         int exit_condition = 0;
