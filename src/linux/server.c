@@ -85,7 +85,7 @@ void handle_connection(int sock) {
                         sprintf(aux_log, "Trapped %s command.", command);
                         std_out(aux_log);
 
-                        if (strcmp(command, CMD_EXIT) == 0) {
+                        if (strcasecmp(command, CMD_EXIT) == 0) {
                                 std_out("Exit asked. Quitting.");
                                 close_socket(sock);
                                 break;
