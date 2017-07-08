@@ -5,6 +5,7 @@
 
 #define CMD_EXIT "EXIT"
 #define CMD_LSTF "LSTF"
+#define CMD_LSTR "LSTR"
 #define CMD_ENCR "ENCR"
 #define CMD_DECR "DECR"
 
@@ -20,7 +21,10 @@
 #define ANSI_COLOR_GREY    "\x1b[37m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
 
-#define std_out(arg) printf(ANSI_COLOR_GREEN "%s" ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
-#define std_err(arg) printf(stderr, ANSI_COLOR_RED "%s" ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
+#define LST_F 0
+#define LST_R 1
+
+#define std_out(arg) fprintf(stdout, ANSI_COLOR_GREEN "%s" ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
+#define std_err(arg) fprintf(stderr, ANSI_COLOR_RED "%s" ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
 
 #endif // SERVER_H

@@ -8,12 +8,16 @@
 #include <stdlib.h>
 #include <sys/stat.h>
 #include <errno.h>
+#include <dirent.h>
 
 #include "server.h"
 #include "threadpool.h"
 
 threadpool thpool;
 char aux_log[100];
+char *arg_folder;
+int arg_port = 0;
+int arg_threads = 0;
 
 int create_socket(int port) {
         std_out("Allocating variables.");
@@ -74,21 +78,33 @@ void handle_connection(int sock) {
                                 buffer[index] = 0;
                         }
 
-                        sprintf(aux_log, "Message received (%d): %s", packet_length, buffer);
-                        std_out(aux_log);
+                        // sprintf(aux_log, "Message received (%d): %s", packet_length, buffer);
+                        // std_out(aux_log);
 
                         // trap command a reduce it to lowercase
+                        char* message = calloc(strlen(buffer)+1, sizeof(char));
+                        strcpy(message, buffer);
                         char *command = strtok(buffer, " ");
                         for(int i = 0; command[i]; i++) {
                                 command[i] = tolower(command[i]);
                         }
-                        sprintf(aux_log, "Trapped %s command.", command);
+                        sprintf(aux_log, "Message \"%s\" (command: \"%s\").", message, command);
                         std_out(aux_log);
 
                         if (strcasecmp(command, CMD_EXIT) == 0) {
                                 std_out("Exit asked. Quitting.");
                                 close_socket(sock);
                                 break;
+                        } else if (strcasecmp(command, CMD_LSTF) == 0) {
+                                list(LST_F);
+                        } else if (strcasecmp(command, CMD_LSTR) == 0) {
+                                list(LST_R);
+                        } else if (strcasecmp(command, CMD_ENCR) == 0) {
+                                std_out("This command will be soon supported.");
+                        } else if (strcasecmp(command, CMD_DECR) == 0) {
+                                std_out("This command will be soon supported.");
+                        } else {
+                                std_err("Command not recognized.");
                         }
 
                         // buffer cleanup
@@ -99,10 +115,51 @@ void handle_connection(int sock) {
         }
 }
 
+void list(int recursive) {
+        list_opt(recursive, arg_folder, 0);
+}
+
+void list_opt(int recursive, char *folder, int recursion_lvl) {
+        DIR *d;
+        struct dirent *dir;
+        d = opendir(folder);
+        int dir_counter = 0;
+        if (d) {
+                while ((dir = readdir(d)) != NULL) {
+                        sprintf(aux_log, "");
+                        for (int i = 0; i < recursion_lvl; i++) {
+                                strcat(aux_log, "  ");
+                        }
+
+                        if (dir->d_type == DT_REG) {
+                                strcat(aux_log, "- ");
+                                strcat(aux_log, dir->d_name);
+                                std_out(aux_log);
+                                if (recursion_lvl == 0) {
+                                        dir_counter++;
+                                }
+                        } else if (dir->d_type == DT_DIR && recursive == LST_R && strcasecmp(dir->d_name, "..") != 0 && strcasecmp(dir->d_name, ".") != 0) { // superunix
+                                strcat(aux_log, "> ");
+                                strcat(aux_log, dir->d_name);
+                                std_out(aux_log);
+
+                                char rec_folder[250];
+                                sprintf(rec_folder, "%s/%s", folder, dir->d_name); // superunix
+                                // sprintf(aux_log, "Found folder \"%s\". Overating over it.", rec_folder);
+                                // std_out(aux_log);
+
+                                list_opt(LST_R, rec_folder, recursion_lvl + 1);
+                        }
+                }
+                if (recursion_lvl == 0 && dir_counter == 0) {
+                        sprintf(aux_log, "Folder \"%s\" actually doesn't contain any regular file.", folder);
+                        std_out(aux_log);
+                }
+                closedir(d);
+        }
+}
+
 int main(int argc, char *argv[]) {
-        char *arg_folder;
-        int arg_port = 0;
-        int arg_threads = 0;
         int opt = 0;
 
         while ((opt = getopt(argc, argv, "c:p:n:")) != -1) {
