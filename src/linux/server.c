@@ -19,6 +19,51 @@ char *arg_folder;
 int arg_port = 0;
 int arg_threads = 0;
 
+void list_opt(char *ret_out, int recursive, char *folder, int recursion_lvl) {
+        DIR *d;
+        struct dirent *dir;
+        d = opendir(folder);
+        int dir_counter = 0;
+        if (d) {
+                while ((dir = readdir(d)) != NULL) {
+                        if (dir->d_type == DT_REG) {
+                                for (int i = 0; i < recursion_lvl; i++) {
+                                        strcat(ret_out, "  ");
+                                }
+                                strcat(ret_out, "F ");
+                                strcat(ret_out, dir->d_name);
+                                strcat(ret_out, "\n");
+
+                                if (recursion_lvl == 0) {
+                                        dir_counter++;
+                                }
+                        } else if (dir->d_type == DT_DIR && recursive == LST_R && strcasecmp(dir->d_name, "..") != 0 && strcasecmp(dir->d_name, ".") != 0) { // superunix
+                                for (int i = 0; i < recursion_lvl; i++) {
+                                        strcat(ret_out, "  ");
+                                }
+                                strcat(ret_out, "D ");
+                                strcat(ret_out, dir->d_name);
+                                strcat(ret_out, "\n");
+
+                                char rec_folder[250];
+                                sprintf(rec_folder, "%s/%s", folder, dir->d_name); // superunix
+                                // sprintf(aux_log, "Found folder \"%s\". Overating over it.", rec_folder);
+                                // std_out(aux_log);
+
+                                list_opt(ret_out, LST_R, rec_folder, recursion_lvl + 1);
+                        }
+                }
+                // if (recursion_lvl == 0 && dir_counter == 0) {
+                //         sprintf(ret_out, "Folder \"%s\" actually doesn't contain any regular file.", folder);
+                // }
+                closedir(d);
+        }
+}
+
+void list(char *ret_out, int recursive) {
+        list_opt(ret_out, recursive, arg_folder, 0);
+}
+
 int create_socket(int port) {
         std_out("Allocating variables.");
         int sock, status;
@@ -73,6 +118,10 @@ void handle_connection(int sock) {
                 if ((packet_length = read(sock, buffer, 512)) < 0) {
                         std_out("Unable to read message.");
                 } else {
+                        if (packet_length <= 2) {
+                                std_err("Packet too small.");
+                                continue;
+                        }
                         // clean buffer (not on packet)
                         for (int index = packet_length-2; index < 512; index++) {
                                 buffer[index] = 0;
@@ -91,20 +140,38 @@ void handle_connection(int sock) {
                         sprintf(aux_log, "Message \"%s\" (command: \"%s\").", message, command);
                         std_out(aux_log);
 
+                        char ret_out[1024];
                         if (strcasecmp(command, CMD_EXIT) == 0) {
+                                sprintf(ret_out, "Exiting.");
                                 std_out("Exit asked. Quitting.");
+                                sock_write(sock, ret_out);
                                 close_socket(sock);
                                 break;
                         } else if (strcasecmp(command, CMD_LSTF) == 0) {
-                                list(LST_F);
+                                sprintf(aux_log, "Files in \"%s\"", arg_folder);
+                                std_out(aux_log);
+                                sock_write(sock, aux_log);
+                                sprintf(ret_out, "");
+                                list(ret_out, LST_F);
+                                // std_out(ret_out);
+                                sock_write(sock, ret_out);
                         } else if (strcasecmp(command, CMD_LSTR) == 0) {
-                                list(LST_R);
+                                sprintf(aux_log, "Files (recursive) in \"%s\"", arg_folder);
+                                std_out(aux_log);
+                                sock_write(sock, aux_log);
+                                sprintf(ret_out, "");
+                                list(ret_out, LST_R);
+                                // std_out(ret_out);
+                                sock_write(sock, ret_out);
                         } else if (strcasecmp(command, CMD_ENCR) == 0) {
-                                std_out("This command will be soon supported.");
+                                sprintf(ret_out, "This command will be soon supported.");
+                                sock_write(sock, ret_out);
                         } else if (strcasecmp(command, CMD_DECR) == 0) {
-                                std_out("This command will be soon supported.");
+                                sprintf(ret_out, "This command will be soon supported.");
+                                sock_write(sock, ret_out);
                         } else {
-                                std_err("Command not recognized.");
+                                sprintf(ret_out, "Command not recognized.");
+                                sock_write(sock, ret_out);
                         }
 
                         // buffer cleanup
@@ -115,48 +182,14 @@ void handle_connection(int sock) {
         }
 }
 
-void list(int recursive) {
-        list_opt(recursive, arg_folder, 0);
-}
-
-void list_opt(int recursive, char *folder, int recursion_lvl) {
-        DIR *d;
-        struct dirent *dir;
-        d = opendir(folder);
-        int dir_counter = 0;
-        if (d) {
-                while ((dir = readdir(d)) != NULL) {
-                        sprintf(aux_log, "");
-                        for (int i = 0; i < recursion_lvl; i++) {
-                                strcat(aux_log, "  ");
-                        }
-
-                        if (dir->d_type == DT_REG) {
-                                strcat(aux_log, "- ");
-                                strcat(aux_log, dir->d_name);
-                                std_out(aux_log);
-                                if (recursion_lvl == 0) {
-                                        dir_counter++;
-                                }
-                        } else if (dir->d_type == DT_DIR && recursive == LST_R && strcasecmp(dir->d_name, "..") != 0 && strcasecmp(dir->d_name, ".") != 0) { // superunix
-                                strcat(aux_log, "> ");
-                                strcat(aux_log, dir->d_name);
-                                std_out(aux_log);
-
-                                char rec_folder[250];
-                                sprintf(rec_folder, "%s/%s", folder, dir->d_name); // superunix
-                                // sprintf(aux_log, "Found folder \"%s\". Overating over it.", rec_folder);
-                                // std_out(aux_log);
-
-                                list_opt(LST_R, rec_folder, recursion_lvl + 1);
-                        }
-                }
-                if (recursion_lvl == 0 && dir_counter == 0) {
-                        sprintf(aux_log, "Folder \"%s\" actually doesn't contain any regular file.", folder);
-                        std_out(aux_log);
-                }
-                closedir(d);
+int sock_write(int sock, char *message) {
+        message = strcat(message, "\r\n");
+        if (write(sock, message, strlen(message)) < 0) {
+                std_err("Unable to send message. Closing socket.");
+                close_socket(sock);
+                return -1;
         }
+        return 0;
 }
 
 int main(int argc, char *argv[]) {
