@@ -12,6 +12,7 @@
 
 #include "server.h"
 #include "threadpool.h"
+#include "cipher.h"
 
 threadpool thpool;
 char aux_log[100];
@@ -164,8 +165,43 @@ void handle_connection(int sock) {
                                 // std_out(ret_out);
                                 sock_write(sock, ret_out);
                         } else if (strcasecmp(command, CMD_ENCR) == 0) {
-                                sprintf(ret_out, "This command will be soon supported.");
-                                sock_write(sock, ret_out);
+                                unsigned int enc_seed;
+                                char *str_seed;
+                                char *enc_path;
+                                for (int i=0; i<3; i++) {
+                                        switch (i) {
+                                        case 0:
+                                                strtok(message, " ");
+                                                break;
+                                        case 1:
+                                                str_seed = strtok(NULL, " ");
+                                                enc_seed = atoi(str_seed);
+                                                break;
+                                        case 2:
+                                                enc_path = strtok(NULL, " ");
+                                                break;
+                                        }
+                                }
+                                sprintf(aux_log, "seed: \"%d\", path: \"%s\"", enc_seed, enc_path);
+                                std_out(aux_log);
+                                sock_write(sock, aux_log);
+
+                                char *enc_path_from = calloc(strlen(arg_folder) + strlen(enc_path) + 1, sizeof(char));
+                                char *enc_path_to = calloc(strlen(arg_folder) + strlen(enc_path) + 5, sizeof(char));
+                                sprintf(enc_path_from, "%s/%s", arg_folder, enc_path); // superunix
+                                sprintf(enc_path_to, "%s_enc", enc_path_from);
+                                srand(enc_seed);
+                                unsigned int enc_key = rand();
+
+                                sprintf(aux_log, "Gonna cipher \"%s\" to \"%s\" using key \"%d\"", enc_path_from, enc_path_to, enc_key);
+                                std_out(aux_log);
+
+                                int enc_out = cipher(enc_path_from, enc_path_to, enc_key, aux_log);
+                                if (enc_out == 0) {
+                                        std_out("Everything gone as expected.");
+                                } else {
+                                        std_err(aux_log);
+                                }
                         } else if (strcasecmp(command, CMD_DECR) == 0) {
                                 sprintf(ret_out, "This command will be soon supported.");
                                 sock_write(sock, ret_out);
