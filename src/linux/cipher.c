@@ -1,6 +1,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/stat.h>
 
 #include "cipher.h"
 
@@ -27,22 +28,36 @@ int cipher(char *input_file, char *output_file, unsigned int key, char *logger) 
                 return 1;
         }
 
+        int par_for = 0;
+        struct stat st;
+        if (stat(input_file, &st) == 0) {
+                if (st.st_size > 1024*PAR_FOR_AT_K) {
+                        par_for = 1;
+                }
+        }
+
+
         //XOR data and write it to file
         char key_str[15];
         sprintf(key_str, "%d", key);
         int key_count = 0; //Used to restart key if strlen(key) < strlen(encrypt)
-        int encrypt_byte;
+        char encrypt_bytes[5];
+        int read_bytes;
 
-        while ((encrypt_byte = fgetc(input)) != EOF) { //Loop through each byte of file until EOF
-                // printf("Char: %c\n", encrypt_byte);
-                //XOR the data and write it to a file
-                fputc(encrypt_byte ^ key_str[key_count], output);
+        for(int byte_ctr = 0; byte_ctr < st.st_size; byte_ctr += 4) {
+                read_bytes = fread(encrypt_bytes, 1, 4, input);
+                for(int byte_ctr_sub = 0; byte_ctr_sub < read_bytes; byte_ctr_sub++) {
+                        if (encrypt_bytes[byte_ctr_sub] == EOF) {
+                                continue;
+                        }
 
-                //Increment key_count and start over if necessary
-                key_count++;
+                        fputc(encrypt_bytes[byte_ctr_sub] ^ key_str[key_count], output);
 
-                if (key_count == strlen(key_str)) {
-                        key_count = 0;
+                        //Increment key_count and start over if necessary
+                        key_count++;
+                        if (key_count == strlen(key_str)) {
+                                key_count = 0;
+                        }
                 }
         }
 

@@ -17,7 +17,7 @@ BDIR=$(PRE_BDIR)/$(PLATFORM)
 ODIR=$(PRE_ODIR)/$(PLATFORM)
 
 CC=gcc
-CFLAGS=-I$(IDIR) -lpthread
+CFLAGS=-I$(IDIR) -lpthread -fopenmp
 
 prepare:
 	@mkdir -p {$(BDIR),$(ODIR)}
