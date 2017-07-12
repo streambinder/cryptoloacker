@@ -197,10 +197,18 @@ void handle_connection(int sock) {
                                 std_out(aux_log);
 
                                 int enc_out = cipher(enc_path_from, enc_path_to, enc_key, aux_log);
-                                if (enc_out == 0) {
-                                        std_out("Everything gone as expected.");
-                                } else {
+                                if (enc_out != 0) {
                                         std_err(aux_log);
+                                        continue;
+                                }
+                                sprintf(aux_log, "Everything gone as expected. Gonna now unlink \"%s\".", enc_path_from);
+                                std_out(aux_log);
+                                int deletion = unlink(enc_path_from);
+                                if (deletion < 0) {
+                                        std_err("Something went wrong during file deletion.");
+                                        continue;
+                                } else {
+                                        std_out("Succesfully ciphered.");
                                 }
                         } else if (strcasecmp(command, CMD_DECR) == 0) {
                                 sprintf(ret_out, "This command will be soon supported.");
