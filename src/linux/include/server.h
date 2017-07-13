@@ -24,6 +24,8 @@
 #define LST_F 0
 #define LST_R 1
 
+#define TAB_SIZE 8
+
 #define std_out(arg) fprintf(stdout, ANSI_COLOR_GREEN "%s" ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
 #define std_err(arg) fprintf(stderr, ANSI_COLOR_RED "%s" ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
 
