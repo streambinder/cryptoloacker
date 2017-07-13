@@ -86,23 +86,6 @@ int cipher(char *input_file, char *output_file, unsigned int key, char *logger) 
                 output_map[i] = input_map[i] ^ key;
         }
 
-        // for(int byte_ctr = 0; byte_ctr < st.st_size; byte_ctr += 4) {
-        //         read_bytes = fread(encrypt_bytes, 1, 4, input);
-        //         for(int byte_ctr_sub = 0; byte_ctr_sub < read_bytes; byte_ctr_sub++) {
-        //                 if (encrypt_bytes[byte_ctr_sub] == EOF) {
-        //                         continue;
-        //                 }
-        //
-        //                 fputc(encrypt_bytes[byte_ctr_sub] ^ key_str[key_count], output);
-        //
-        //                 //Increment key_count and start over if necessary
-        //                 key_count++;
-        //                 if (key_count == strlen(key_str)) {
-        //                         key_count = 0;
-        //                 }
-        //         }
-        // }
-
         //Close files
         int input_unmap = munmap(input_map, input_size);
         if (input_unmap < 0) {
