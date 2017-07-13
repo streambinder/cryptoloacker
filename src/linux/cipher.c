@@ -1,9 +1,12 @@
 #include <fcntl.h>
+#include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/file.h>
 #include <sys/mman.h>
 #include <sys/stat.h>
+#include <unistd.h>
 
 #include "cipher.h"
 #include "common.h"
@@ -40,7 +43,6 @@ int cipher(char *input_file, char *output_file, unsigned int key, char *logger) 
         }
 
         // output file
-        // S_IRWXU | S_IRGRP | S_IROTH
         int output = open(output_file, O_RDWR | O_CREAT, S_IRUSR | S_IWUSR | S_IRGRP | S_IROTH);
         if (output == -1) {
                 sprintf(logger, "Output file \"%s\" cannot be written.", output_file);

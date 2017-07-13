@@ -1,14 +1,15 @@
-#include <stdio.h>
-#include <sys/types.h>
-#include <sys/socket.h>
-#include <netinet/in.h>
-#include <fcntl.h>
-#include <string.h>
-#include <unistd.h>
-#include <stdlib.h>
-#include <sys/stat.h>
-#include <errno.h>
+#include <ctype.h>
 #include <dirent.h>
+#include <errno.h>
+#include <fcntl.h>
+#include <netinet/in.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 
 #include "server.h"
 #include "threadpool.h"
@@ -140,10 +141,21 @@ void close_socket(int sock) {
         return;
 }
 
+
+int write_socket(int sock, char *message) {
+        message = strcat(message, "\r\n");
+        if (write(sock, message, strlen(message)) < 0) {
+                std_err("Unable to send message. Closing socket.");
+                close_socket(sock);
+                return -1;
+        }
+        return 0;
+}
+
 void handle_connection(int sock) {
         char buffer[512+1];
         int packet_length;
-        buffer[512] = "\0";
+        buffer[512] = 0;
         for (;; ) {
                 if ((packet_length = read(sock, buffer, 512)) < 0) {
                         std_out("Unable to read message.");
@@ -174,25 +186,25 @@ void handle_connection(int sock) {
                         if (strcasecmp(command, CMD_EXIT) == 0) {
                                 sprintf(ret_out, "Exiting.");
                                 std_out("Exit asked. Quitting.");
-                                sock_write(sock, ret_out);
+                                write_socket(sock, ret_out);
                                 close_socket(sock);
                                 break;
                         } else if (strcasecmp(command, CMD_LSTF) == 0) {
                                 sprintf(aux_log, "300");
                                 std_out(aux_log);
-                                sock_write(sock, aux_log);
+                                write_socket(sock, aux_log);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_F);
                                 // std_out(ret_out);
-                                sock_write(sock, ret_out);
+                                write_socket(sock, ret_out);
                         } else if (strcasecmp(command, CMD_LSTR) == 0) {
                                 sprintf(aux_log, "300");
                                 std_out(aux_log);
-                                sock_write(sock, aux_log);
+                                write_socket(sock, aux_log);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_R);
                                 // std_out(ret_out);
-                                sock_write(sock, ret_out);
+                                write_socket(sock, ret_out);
                         } else if (strcasecmp(command, CMD_ENCR) == 0 || strcasecmp(command, CMD_DECR) == 0) {
                                 char *str_seed;
                                 char *enc_path;
@@ -228,7 +240,7 @@ void handle_connection(int sock) {
                                         sprintf(aux_log, "Input file \"%s\" does not exist.", enc_path_from);
                                         std_err(aux_log);
                                         sprintf(aux_log, "%d Cannot access to \"%s\"", RTRN_NOK, enc_path_from);
-                                        sock_write(sock, aux_log);
+                                        write_socket(sock, aux_log);
                                         continue;
                                 }
                                 int ret_code = toggle_cipher(str_seed, enc_path_from, enc_path_to);
@@ -237,10 +249,10 @@ void handle_connection(int sock) {
                                 } else {
                                         sprintf(aux_log, "%d Unable to apply %s on \"%s\"", ret_code, command, enc_path_from);
                                 }
-                                sock_write(sock, aux_log);
+                                write_socket(sock, aux_log);
                         } else {
                                 sprintf(ret_out, "Command not recognized.");
-                                sock_write(sock, ret_out);
+                                write_socket(sock, ret_out);
                         }
 
                         // buffer cleanup
@@ -249,16 +261,6 @@ void handle_connection(int sock) {
                         }
                 }
         }
-}
-
-int sock_write(int sock, char *message) {
-        message = strcat(message, "\r\n");
-        if (write(sock, message, strlen(message)) < 0) {
-                std_err("Unable to send message. Closing socket.");
-                close_socket(sock);
-                return -1;
-        }
-        return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -270,7 +272,7 @@ int main(int argc, char *argv[]) {
                         arg_folder = optarg;
                         break;
                 case 'n':
-                        arg_threads = optarg;
+                        arg_threads = *optarg;
                         break;
                 case 'p':
                         if (!isdigit(*optarg)) {
