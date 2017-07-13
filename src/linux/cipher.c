@@ -78,7 +78,11 @@ int cipher(char *input_file, char *output_file, unsigned int key, char *logger) 
         }
 
         //XOR data and write it to file
-        for(int i = 0; i < ceil(input_size/4.); i++) {
+        int i;
+        int upperbound = ceil(input_size/4.);
+        if (par_for == 1)
+        #pragma omp parallel for
+        for(i = 0; i < upperbound; i++) {
                 output_map[i] = input_map[i] ^ key;
         }
 

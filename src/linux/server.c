@@ -191,7 +191,6 @@ void handle_connection(int sock) {
                                 break;
                         } else if (strcasecmp(command, CMD_LSTF) == 0) {
                                 sprintf(aux_log, "300");
-                                std_out(aux_log);
                                 write_socket(sock, aux_log);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_F);
@@ -199,7 +198,6 @@ void handle_connection(int sock) {
                                 write_socket(sock, ret_out);
                         } else if (strcasecmp(command, CMD_LSTR) == 0) {
                                 sprintf(aux_log, "300");
-                                std_out(aux_log);
                                 write_socket(sock, aux_log);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_R);
