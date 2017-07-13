@@ -13,6 +13,7 @@
 #include "server.h"
 #include "threadpool.h"
 #include "cipher.h"
+#include "common.h"
 
 threadpool thpool;
 char aux_log[100];
@@ -63,6 +64,34 @@ void list_opt(char *ret_out, int recursive, char *folder, int recursion_lvl) {
 
 void list(char *ret_out, int recursive) {
         list_opt(ret_out, recursive, arg_folder, 0);
+}
+
+int toggle_cipher(char *str_seed, char *enc_path_from, char *enc_path_to) {
+        int enc_seed = atoi(str_seed);
+        srand(enc_seed);
+        unsigned int enc_key = rand();
+
+        sprintf(aux_log, "Gonna cipher \"%s\" to \"%s\" using key \"%d\"", enc_path_from, enc_path_to, enc_key);
+        std_out(aux_log);
+
+        int enc_out = cipher(enc_path_from, enc_path_to, enc_key, aux_log);
+        if (enc_out != RTRN_CPH_OK) {
+                std_err(aux_log);
+                return enc_out;
+        }
+
+        sprintf(aux_log, "Everything gone as expected: going to unlink \"%s\".", enc_path_from);
+        std_out(aux_log);
+
+        int deletion = unlink(enc_path_from);
+        if (deletion < 0) {
+                std_err("Something went wrong during file deletion.");
+                return RTRN_NOK;
+        } else {
+                std_out("Succesfully ciphered.");
+        }
+
+        return RTRN_CPH_OK;
 }
 
 int create_socket(int port) {
@@ -149,7 +178,7 @@ void handle_connection(int sock) {
                                 close_socket(sock);
                                 break;
                         } else if (strcasecmp(command, CMD_LSTF) == 0) {
-                                sprintf(aux_log, "Files in \"%s\"", arg_folder);
+                                sprintf(aux_log, "300");
                                 std_out(aux_log);
                                 sock_write(sock, aux_log);
                                 sprintf(ret_out, "");
@@ -157,17 +186,18 @@ void handle_connection(int sock) {
                                 // std_out(ret_out);
                                 sock_write(sock, ret_out);
                         } else if (strcasecmp(command, CMD_LSTR) == 0) {
-                                sprintf(aux_log, "Files (recursive) in \"%s\"", arg_folder);
+                                sprintf(aux_log, "300");
                                 std_out(aux_log);
                                 sock_write(sock, aux_log);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_R);
                                 // std_out(ret_out);
                                 sock_write(sock, ret_out);
-                        } else if (strcasecmp(command, CMD_ENCR) == 0) {
-                                unsigned int enc_seed;
+                        } else if (strcasecmp(command, CMD_ENCR) == 0 || strcasecmp(command, CMD_DECR) == 0) {
                                 char *str_seed;
                                 char *enc_path;
+                                char *enc_path_from;
+                                char *enc_path_to;
                                 for (int i=0; i<3; i++) {
                                         switch (i) {
                                         case 0:
@@ -175,44 +205,39 @@ void handle_connection(int sock) {
                                                 break;
                                         case 1:
                                                 str_seed = strtok(NULL, " ");
-                                                enc_seed = atoi(str_seed);
                                                 break;
                                         case 2:
                                                 enc_path = strtok(NULL, " ");
                                                 break;
                                         }
                                 }
-                                sprintf(aux_log, "seed: \"%d\", path: \"%s\"", enc_seed, enc_path);
-                                std_out(aux_log);
-                                sock_write(sock, aux_log);
 
-                                char *enc_path_from = calloc(strlen(arg_folder) + strlen(enc_path) + 1, sizeof(char));
-                                char *enc_path_to = calloc(strlen(arg_folder) + strlen(enc_path) + 5, sizeof(char));
-                                sprintf(enc_path_from, "%s/%s", arg_folder, enc_path); // superunix
-                                sprintf(enc_path_to, "%s_enc", enc_path_from);
-                                srand(enc_seed);
-                                unsigned int enc_key = rand();
-
-                                sprintf(aux_log, "Gonna cipher \"%s\" to \"%s\" using key \"%d\"", enc_path_from, enc_path_to, enc_key);
-                                std_out(aux_log);
-
-                                int enc_out = cipher(enc_path_from, enc_path_to, enc_key, aux_log);
-                                if (enc_out != 0) {
-                                        std_err(aux_log);
-                                        continue;
-                                }
-                                sprintf(aux_log, "Everything gone as expected. Gonna now unlink \"%s\".", enc_path_from);
-                                std_out(aux_log);
-                                int deletion = unlink(enc_path_from);
-                                if (deletion < 0) {
-                                        std_err("Something went wrong during file deletion.");
-                                        continue;
+                                if (strcasecmp(command, CMD_ENCR) == 0) {
+                                        enc_path_from = calloc(strlen(arg_folder) + 1 + strlen(enc_path), sizeof(char));
+                                        enc_path_to = calloc(strlen(arg_folder) + 1 + strlen(enc_path) + 4, sizeof(char));
+                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path); // superunix
+                                        sprintf(enc_path_to, "%s_enc", enc_path_from);
                                 } else {
-                                        std_out("Succesfully ciphered.");
+                                        enc_path_from = calloc(strlen(arg_folder) + 1 + strlen(enc_path), sizeof(char));
+                                        enc_path_to = calloc(strlen(arg_folder) + 1 + strlen(enc_path) - 4, sizeof(char));
+                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path);     // superunix
+                                        sprintf(enc_path_to, "%s", enc_path_from);
+                                        enc_path_to[strlen(enc_path_to) - 4] = 0;
                                 }
-                        } else if (strcasecmp(command, CMD_DECR) == 0) {
-                                sprintf(ret_out, "This command will be soon supported.");
-                                sock_write(sock, ret_out);
+                                if (access(enc_path_from, F_OK) == -1) {
+                                        sprintf(aux_log, "Input file \"%s\" does not exist.", enc_path_from);
+                                        std_err(aux_log);
+                                        sprintf(aux_log, "%d Cannot access to \"%s\"", RTRN_NOK, enc_path_from);
+                                        sock_write(sock, aux_log);
+                                        continue;
+                                }
+                                int ret_code = toggle_cipher(str_seed, enc_path_from, enc_path_to);
+                                if (ret_code == RTRN_CPH_OK) {
+                                        sprintf(aux_log, "%d Applied %s on \"%s\"", ret_code, command, enc_path_from);
+                                } else {
+                                        sprintf(aux_log, "%d Unable to apply %s on \"%s\"", ret_code, command, enc_path_from);
+                                }
+                                sock_write(sock, aux_log);
                         } else {
                                 sprintf(ret_out, "Command not recognized.");
                                 sock_write(sock, ret_out);
