@@ -1,5 +1,6 @@
 #include <fcntl.h>
 #include <math.h>
+#include <inttypes.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -14,8 +15,6 @@
 char aux_log[250];
 
 int cipher(char *input_file, char *output_file, unsigned int key, char *logger) {
-
-        int par_for = 0;
 
         // input file
         int input = open(input_file, O_RDONLY, 0);
@@ -72,18 +71,19 @@ int cipher(char *input_file, char *output_file, unsigned int key, char *logger) 
                 return RTRN_NOK;
         }
 
-        // parallelism needed
-        if (input_size > 1024*PAR_FOR_AT_K) {
-                par_for = 1;
-        }
-
         //XOR data and write it to file
-        int i;
-        int upperbound = ceil(input_size/4.);
-        if (par_for == 1)
+        uint64_t i,j;
+        uint64_t upperbound_in;
+        uint64_t upperbound_out = ceil(input_size/4./(PAR_FOR_AT_K*1024));
         #pragma omp parallel for
-        for(i = 0; i < upperbound; i++) {
-                output_map[i] = input_map[i] ^ key;
+        for(j = 0; j < upperbound_out; j++) {
+                upperbound_in = ceil((PAR_FOR_AT_K*1024));
+                for(i = 0; i < upperbound_in; i++) {
+                        uint64_t index = PAR_FOR_AT_K*1024*j + i;
+                        if (index < input_size/4.) {
+                                output_map[index] = input_map[index] ^ key;
+                        }
+                }
         }
 
         //Close files

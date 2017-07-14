@@ -78,7 +78,7 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
 
 void list(char *ret_out, int recursive) {
         list_opt(ret_out, recursive, arg_folder, NULL);
-        strcat(ret_out, ".\r\n");
+        strcat(ret_out, ".");
 }
 
 int toggle_cipher(char *str_seed, char *enc_path_from, char *enc_path_to) {
