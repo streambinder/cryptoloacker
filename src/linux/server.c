@@ -3,6 +3,7 @@
 #include <errno.h>
 #include <fcntl.h>
 #include <netinet/in.h>
+#include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -21,6 +22,12 @@ char aux_log[100];
 char *arg_folder;
 int arg_port = 0;
 int arg_threads = 0;
+
+void signal_handler(int sig) {
+        if (sig == SIGHUP) {
+                std_out("Received: flushing configuration.");
+        }
+}
 
 void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
         char *folder_abs;
@@ -205,14 +212,12 @@ void handle_connection(int sock) {
                                 write_socket(sock, aux_log);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_F);
-                                // std_out(ret_out);
                                 write_socket(sock, ret_out);
                         } else if (strcasecmp(command, CMD_LSTR) == 0) {
                                 sprintf(aux_log, "300");
                                 write_socket(sock, aux_log);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_R);
-                                // std_out(ret_out);
                                 write_socket(sock, ret_out);
                         } else if (strcasecmp(command, CMD_ENCR) == 0 || strcasecmp(command, CMD_DECR) == 0) {
                                 char *str_seed;
@@ -331,6 +336,11 @@ int main(int argc, char *argv[]) {
         sprintf(aux_log, "Creating threadpool by %d.", arg_threads);
         std_out(aux_log);
         thpool = thpool_init(arg_threads);
+
+        std_out("Trying to catch SIGHUP signals.");
+        if (signal(SIGHUP, signal_handler) == SIG_ERR) {
+                std_err("Unable to handle SIGHUP.");
+        }
 
         int sock_descriptor, sock_new;
         int exit_condition = 0;
