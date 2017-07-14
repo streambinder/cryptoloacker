@@ -350,13 +350,16 @@ int main(int argc, char *argv[]) {
         std_out("Waiting for connections.");
         for (;; ) {
                 if ((sock_new = accept(sock_descriptor, 0, 0)) != -1) {
-                        handle_connection(sock_new);
+                        thpool_add_work(thpool, (void*)handle_connection, sock_new);
                 }
         }
 
         close_socket(sock_new);
         close_socket(sock_descriptor);
         std_out("Exited.");
+
+        thpool_wait(thpool);
+        thpool_destroy(thpool);
 
         return 0;
 }
