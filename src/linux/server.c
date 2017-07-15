@@ -20,12 +20,17 @@
 threadpool thpool;
 char aux_log[100];
 char *arg_folder;
+char *arg_config;
 int arg_port = 0;
 int arg_threads = 0;
 
 void signal_handler(int sig) {
         if (sig == SIGHUP) {
                 std_out("Received: flushing configuration.");
+                int status = inherit_configuration(arg_config);
+                if (status != 0) {
+                        std_err("Unable to read configuration. Check syntax.");
+                }
         }
 }
 
@@ -246,7 +251,7 @@ void handle_connection(int sock) {
                                 } else {
                                         enc_path_from = calloc(strlen(arg_folder) + 1 + strlen(enc_path), sizeof(char));
                                         enc_path_to = calloc(strlen(arg_folder) + 1 + strlen(enc_path) - 4, sizeof(char));
-                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path);     // superunix
+                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path); // superunix
                                         sprintf(enc_path_to, "%s", enc_path_from);
                                         enc_path_to[strlen(enc_path_to) - 4] = 0;
                                 }
@@ -277,13 +282,67 @@ void handle_connection(int sock) {
         }
 }
 
+int inherit_configuration(char *config_file) {
+        if (access(arg_config, F_OK) == -1) {
+                sprintf(aux_log, "config: file \"%s\" seems not to be existing.", arg_config);
+                std_err(aux_log);
+                return 1;
+        } else {
+                FILE *config;
+                char *line = NULL;
+                size_t len = 0;
+                ssize_t read;
+
+                config = fopen(config_file, "r");
+                if (config == NULL) {
+                        return 1;
+                }
+                char *config_key, *config_value;
+                while ((read = getline(&line, &len, config)) != -1) {
+                        line[read-1] = 0;
+                        sprintf(aux_log, "config: line of lenght %zu: \"%s\"", read, line);
+                        std_out(aux_log);
+                        config_key = strtok(line, "=");
+                        config_value = strtok(NULL, "=");
+                        config_key = trim(config_key);
+                        config_value = trim(config_value);
+                        if (strcasecmp(config_key, "port") == 0) {
+                                sprintf(aux_log, "config: found \"%s\" value \"%s\".", config_key, config_value);
+                                std_out(aux_log);
+                                if (!isdigit(*config_value)) {
+                                        sprintf(aux_log, "config: \"%s\" key value \"%s\" must be integer parseable.", config_key, config_value);
+                                        std_err(aux_log);
+                                        return 1;
+                                }
+                                arg_port = atoi(config_value);
+                        } else if (strcasecmp(config_key, "folder") == 0) {
+                                sprintf(aux_log, "config: found \"%s\" value \"%s\".", config_key, config_value);
+                                std_out(aux_log);
+                                arg_folder = calloc(strlen(config_value), sizeof(char));
+                                strcpy(arg_folder, config_value);
+                        } else {
+                                sprintf(aux_log, "config: key \"%s\" not recognized, ignored.", config_key);
+                                std_err(aux_log);
+                        }
+                }
+
+                fclose(config);
+                if (line) {
+                        free(line);
+                }
+        }
+}
+
 int main(int argc, char *argv[]) {
         int opt = 0;
 
-        while ((opt = getopt(argc, argv, "c:p:n:")) != -1) {
+        while ((opt = getopt(argc, argv, "c:f:p:n:")) != -1) {
                 switch(opt) {
                 case 'c':
                         arg_folder = optarg;
+                        break;
+                case 'f':
+                        arg_config = optarg;
                         break;
                 case 'n':
                         arg_threads = *optarg;
@@ -296,7 +355,7 @@ int main(int argc, char *argv[]) {
                         arg_port = atoi(optarg);
                         break;
                 case '?':
-                        if (optopt == 'c' || optopt == 'p') {
+                        if (optopt == 'f' && (optopt == 'c' || optopt == 'p')) {
                                 sprintf(aux_log, "Missing '-%c' mandatory input.", optopt);
                                 std_out(aux_log);
                         } else {
@@ -306,20 +365,15 @@ int main(int argc, char *argv[]) {
                         break;
                 }
         }
-
-        int arg_folder_exist = 1;
-        struct stat s;
-        int err = stat(arg_folder, &s);
-        if(err == -1) {
-                if(errno == ENOENT) {
-                        arg_folder_exist = 0;
-                }
-        } else {
-                if(!S_ISDIR(s.st_mode)) {
-                        arg_folder_exist = 0;
+        if (arg_config != NULL) {
+                int status = inherit_configuration(arg_config);
+                if (status != 0) {
+                        std_err("Unable to load configuration from file. Exiting.");
+                        exit(EXIT_FAILURE);
                 }
         }
-        if (!arg_folder_exist) {
+
+        if (access(arg_folder, F_OK) == -1) {
                 std_out("'-c' input must be an existing filesystem path.");
                 exit(EXIT_FAILURE);
         }
