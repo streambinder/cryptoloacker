@@ -25,10 +25,10 @@ prepare:
 $(ODIR)/%.o: $(CDIR)/%.c prepare
 	$(CC) -g -O -c -o $@ $< $(CFLAGS)
 
-server: $(ODIR)/server.o $(ODIR)/threadpool.o $(ODIR)/cipher.o $(ODIR)/common.o 
+server: $(ODIR)/server.o $(ODIR)/threadpool.o $(ODIR)/cipher.o $(ODIR)/common.o
 	gcc -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
 
-client: $(ODIR)/client.o
+client: $(ODIR)/client.o $(ODIR)/common.o
 	gcc -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
 
 all: server client
