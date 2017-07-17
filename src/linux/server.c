@@ -51,7 +51,12 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
                         if (dir->d_type == DT_REG) {
                                 char *filename_path = calloc(strlen(folder_abs) + "/" + strlen(dir->d_name), sizeof(char)); // superunix
                                 sprintf(filename_path, "%s/%s", folder_abs, dir->d_name);
-                                int filename = fopen(filename_path, "r");
+                                FILE *filename = fopen(filename_path, "r+");
+                                if (filename == NULL) {
+                                        sprintf(aux_log, "Unable to access file \"%s\".", filename_path);
+                                        std_err(aux_log);
+                                        continue;
+                                }
                                 fseek(filename, 0, SEEK_END);
                                 int size = ftell(filename);
                                 fseek(filename, 0, SEEK_SET);
@@ -186,8 +191,9 @@ void handle_connection(int sock) {
                         std_out("Unable to read message.");
                 } else {
                         if (packet_length <= 2) {
-                                std_err("Packet too small.");
-                                continue;
+                                std_err("Packet too small. Exiting.");
+                                close_socket(sock);
+                                break;
                         }
                         // clean buffer (not on packet)
                         for (int index = packet_length-2; index < 512; index++) {
@@ -207,7 +213,7 @@ void handle_connection(int sock) {
                         sprintf(aux_log, "Message \"%s\" (command: \"%s\").", message, command);
                         std_out(aux_log);
 
-                        char ret_out[100];
+                        char ret_out[5000];
                         if (strcasecmp(command, CMD_EXIT) == 0) {
                                 std_out("Exit asked. Quitting.");
                                 close_socket(sock);
