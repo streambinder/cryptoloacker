@@ -137,6 +137,7 @@ int create_socket(int port) {
         int enable = 1;
         if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
                 std_err("setsockopt(SO_REUSEADDR) failed.");
+                exit(EXIT_FAILURE);
         }
 
         sock_conf.sin_family = AF_INET;
@@ -147,6 +148,7 @@ int create_socket(int port) {
         if (status != 0) {
                 sprintf(aux_log, "Error %d manipulating socket file descriptor.", status);
                 std_err(aux_log);
+                exit(EXIT_FAILURE);
         }
 
         std_out("Binding socket.");
@@ -154,6 +156,7 @@ int create_socket(int port) {
         if (status != 0) {
                 sprintf(aux_log, "Error %d binding socket.", status);
                 std_err(aux_log);
+                exit(EXIT_FAILURE);
         }
 
         std_out("Listening for connection.");
@@ -161,6 +164,7 @@ int create_socket(int port) {
         if (status != 0) {
                 sprintf(aux_log, "Error %d making socket listening.", status);
                 std_err(aux_log);
+                exit(EXIT_FAILURE);
         }
 
         return sock;
