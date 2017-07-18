@@ -1,6 +1,8 @@
 #include <ctype.h>
 #include <string.h>
 
+#include "stringer.h"
+
 char *trim(char *str) {
         char *end;
 

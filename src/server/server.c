@@ -12,10 +12,11 @@
 #include <sys/types.h>
 #include <unistd.h>
 
-#include "server.h"
-#include "threadpool.h"
 #include "cipher.h"
-#include "common.h"
+#include "opt.h"
+#include "server.h"
+#include "stringer.h"
+#include "threadpool.h"
 
 threadpool thpool;
 char aux_log[100];
@@ -107,7 +108,7 @@ int toggle_cipher(char *str_seed, char *enc_path_from, char *enc_path_to) {
         std_out(aux_log);
 
         int enc_out = cipher(enc_path_from, enc_path_to, enc_key, aux_log);
-        if (enc_out != RTRN_CPH_OK) {
+        if (enc_out != CMD_CPH_OK) {
                 std_err(aux_log);
                 return enc_out;
         }
@@ -118,12 +119,12 @@ int toggle_cipher(char *str_seed, char *enc_path_from, char *enc_path_to) {
         int deletion = unlink(enc_path_from);
         if (deletion < 0) {
                 std_err("Something went wrong during file deletion.");
-                return RTRN_NOK;
+                return CMD_NOK;
         } else {
                 std_out("Succesfully ciphered.");
         }
 
-        return RTRN_CPH_OK;
+        return CMD_CPH_OK;
 }
 
 int create_socket(int port) {
@@ -268,12 +269,12 @@ void handle_connection(int sock) {
                                 if (access(enc_path_from, F_OK) == -1) {
                                         sprintf(aux_log, "Input file \"%s\" does not exist.", enc_path_from);
                                         std_err(aux_log);
-                                        sprintf(aux_log, "%d Cannot access to \"%s\"", RTRN_NOK, enc_path_from);
+                                        sprintf(aux_log, "%d Cannot access to \"%s\"", CMD_NOK, enc_path_from);
                                         write_socket(sock, aux_log);
                                         continue;
                                 }
                                 int ret_code = toggle_cipher(str_seed, enc_path_from, enc_path_to);
-                                if (ret_code == RTRN_CPH_OK) {
+                                if (ret_code == CMD_CPH_OK) {
                                         sprintf(aux_log, "%d Applied %s on \"%s\"", ret_code, command, enc_path_from);
                                 } else {
                                         sprintf(aux_log, "%d Unable to apply %s on \"%s\"", ret_code, command, enc_path_from);

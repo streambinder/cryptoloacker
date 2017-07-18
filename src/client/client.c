@@ -6,7 +6,7 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
-#include "common.h"
+#include "opt.h"
 
 int sock;
 
