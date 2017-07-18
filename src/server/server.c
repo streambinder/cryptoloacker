@@ -96,7 +96,6 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
 
 void list(char *ret_out, int recursive) {
         list_opt(ret_out, recursive, arg_folder, NULL);
-        strcat(ret_out, ".");
 }
 
 int toggle_cipher(char *str_seed, char *enc_path_from, char *enc_path_to) {
@@ -177,8 +176,11 @@ void close_socket(int sock) {
         return;
 }
 
-int write_socket(int sock, char *message) {
-        message = strcat(message, "\r\n");
+int write_socket(int sock, char *message, int last) {
+        strcat(message, "\r\n");
+        if (last == 1) {
+                strcat(message, ".\r\n");
+        }
         if (write(sock, message, strlen(message)) < 0) {
                 std_err("Unable to send message. Closing socket.");
                 close_socket(sock);
@@ -193,7 +195,8 @@ void handle_connection(int sock) {
         buffer[512] = 0;
         for (;; ) {
                 if ((packet_length = read(sock, buffer, 512)) < 0) {
-                        std_out("Unable to read message.");
+                        std_err("Unable to read message.");
+                        break;
                 } else {
                         if (packet_length <= 2) {
                                 std_err("Packet too small. Exiting.");
@@ -225,16 +228,16 @@ void handle_connection(int sock) {
                                 break;
                         } else if (strcasecmp(command, CMD_LSTF) == 0) {
                                 sprintf(aux_log, "300");
-                                write_socket(sock, aux_log);
+                                write_socket(sock, aux_log, 0);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_F);
-                                write_socket(sock, ret_out);
+                                write_socket(sock, ret_out, 1);
                         } else if (strcasecmp(command, CMD_LSTR) == 0) {
                                 sprintf(aux_log, "300");
-                                write_socket(sock, aux_log);
+                                write_socket(sock, aux_log, 0);
                                 sprintf(ret_out, "");
                                 list(ret_out, LST_R);
-                                write_socket(sock, ret_out);
+                                write_socket(sock, ret_out, 1);
                         } else if (strcasecmp(command, CMD_ENCR) == 0 || strcasecmp(command, CMD_DECR) == 0) {
                                 char *str_seed;
                                 char *enc_path;
@@ -270,7 +273,7 @@ void handle_connection(int sock) {
                                         sprintf(aux_log, "Input file \"%s\" does not exist.", enc_path_from);
                                         std_err(aux_log);
                                         sprintf(aux_log, "%d Cannot access to \"%s\"", CMD_NOK, enc_path_from);
-                                        write_socket(sock, aux_log);
+                                        write_socket(sock, aux_log, 1);
                                         continue;
                                 }
                                 int ret_code = toggle_cipher(str_seed, enc_path_from, enc_path_to);
@@ -279,10 +282,10 @@ void handle_connection(int sock) {
                                 } else {
                                         sprintf(aux_log, "%d Unable to apply %s on \"%s\"", ret_code, command, enc_path_from);
                                 }
-                                write_socket(sock, aux_log);
+                                write_socket(sock, aux_log, 1);
                         } else {
                                 sprintf(ret_out, "Command not recognized.");
-                                write_socket(sock, ret_out);
+                                write_socket(sock, ret_out, 1);
                         }
 
                         // buffer cleanup
@@ -360,7 +363,8 @@ int main(int argc, char *argv[]) {
                         break;
                 case 'p':
                         if (!isdigit(*optarg)) {
-                                std_out("'-p' input must be an integer parseable value.");
+                                sprintf(aux_log, "'-p' input must be an integer parseable value (passed: \"%s\").", optarg);
+                                std_err(aux_log);
                                 exit(EXIT_FAILURE);
                         }
                         arg_port = atoi(optarg);
@@ -368,9 +372,9 @@ int main(int argc, char *argv[]) {
                 case '?':
                         if (optopt == 'f' && (optopt == 'c' || optopt == 'p')) {
                                 sprintf(aux_log, "Missing '-%c' mandatory input.", optopt);
-                                std_out(aux_log);
+                                std_err(aux_log);
                         } else {
-                                std_out("Invalid option received.");
+                                std_err("Invalid option received.");
                         }
                         exit(EXIT_FAILURE);
                         break;
