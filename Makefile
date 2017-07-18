@@ -1,37 +1,61 @@
 .DEFAULT_GOAL = all
 
+SRVR=cryptoloackerd
+CLNT=cryptoloacker
+
 ifeq ($(OS),Windows_NT)
 	PLATFORM=windows
+	PLATFORM_EXC=linux
 else
 	PLATFORM=linux
+	PLATFORM_EXC=windows
 endif
 
 ABSPATH=${CURDIR}
 
-CDIR=$(ABSPATH)/src/$(PLATFORM)
-IDIR=$(CDIR)/include
-
-PRE_BDIR=$(ABSPATH)/bin
-PRE_ODIR=$(ABSPATH)/obj
-BDIR=$(PRE_BDIR)/$(PLATFORM)
-ODIR=$(PRE_ODIR)/$(PLATFORM)
+CDIR=$(ABSPATH)/src
+IDIR=$(CDIR)/include/common
+IDIR_P=$(CDIR)/include/$(PLATFORM)
+BDIR=$(ABSPATH)/bin
+ODIR=$(ABSPATH)/obj
+TDIR=$(ABSPATH)/tmp
 
 CC=gcc
-CFLAGS=-I$(IDIR) -lpthread -fopenmp
+CFLAGS=-lpthread -fopenmp
 
-prepare:
-	@mkdir -p {$(BDIR),$(ODIR)}
+$(ODIR)/%:
+	$(eval SRC := $(shell echo $@ | sed 's/\.o/\.c/g' | sed "s/\/obj\//\/tmp\//g"))
+	$(CC) -g -O -c -o $@ $(SRC) -I$(TDIR)/$(TRGT) $(CFLAGS)
 
-$(ODIR)/%.o: $(CDIR)/%.c prepare
-	$(CC) -g -O -c -o $@ $< $(CFLAGS)
+$(BDIR)/%:
+	$(eval HDRS := $(shell find $(CDIR)/$(TRGT) -name '*.h' | grep -v "$(PLATFORM_EXC)"))
+	$(eval HDRS := $(HDRS) $(shell find $(CDIR)/common -name '*.h' | grep -v "$(PLATFORM_EXC)"))
+	$(eval SRCS := $(shell find $(CDIR)/$(TRGT) -name '*.c' | grep -v "$(PLATFORM_EXC)"))
+	$(eval SRCS := $(SRCS) $(shell find $(CDIR)/common -name '*.c'))
+	$(eval TMPS := $(SRCS:$(CDIR)%=$(TDIR)%))
+	$(eval TMPS := $(shell echo $(TMPS) | sed 's/include\/common\///g' | sed 's/include\/$(PLATFORM)\///g' | sed 's/\/common\//\/$(TRGT)\//g'))
+	$(eval OBJS := $(TMPS:$(TDIR)%.c=$(ODIR)%.o))
+	@cp $(SRCS) $(HDRS) $(TDIR)/$(TRGT)/
+	@$(MAKE) TRGT=$@ $(OBJS)
+	$(CC) -o $@ $(OBJS) $(CFLAGS) -I$(TDIR)/$(TRGT) $(LIBS)
 
-server: $(ODIR)/server.o $(ODIR)/threadpool.o $(ODIR)/cipher.o $(ODIR)/common.o
-	gcc -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+server:
+	@$(MAKE) pre-build
+	@$(MAKE) TRGT=$@ $(BDIR)/$(SRVR)
+	@$(MAKE) post-build
 
-client: $(ODIR)/client.o $(ODIR)/common.o
-	gcc -o $(BDIR)/$@ $^ $(CFLAGS) $(LIBS)
+client:
+	@$(MAKE) pre-build
+	@$(MAKE) TRGT=$@ $(BDIR)/$(CLNT)
+	@$(MAKE) post-build
+
+pre-build:
+	@mkdir -p {$(BDIR),$(ODIR)/{server,client},$(TDIR)/{server,client}}
+
+post-build:
+	@rm -rf $(TDIR)
 
 all: server client
 
 clean:
-	@rm -rf $(PRE_BDIR) $(PRE_ODIR)
+	@rm -rf $(BDIR) $(ODIR) $(TDIR)
