@@ -21,11 +21,11 @@ ODIR=$(ABSPATH)/obj
 TDIR=$(ABSPATH)/tmp
 
 CC=gcc
-CFLAGS=-lpthread -fopenmp
+CFLAGS=-O -lpthread -fopenmp $(ADDITIONAL)
 
 $(ODIR)/%:
 	$(eval SRC := $(shell echo $@ | sed 's/\.o/\.c/g' | sed "s/\/obj\//\/tmp\//g"))
-	$(CC) -g -O -c -o $@ $(SRC) -I$(TDIR)/$(TRGT) $(CFLAGS)
+	$(CC) -c -o $@ $(SRC) -I$(TDIR)/$(TRGT) $(CFLAGS)
 
 $(BDIR)/%:
 	$(eval HDRS := $(shell find $(CDIR)/$(TRGT) -name '*.h' | grep -v "$(PLATFORM_EXC)"))
@@ -54,6 +54,9 @@ pre-build:
 
 post-build:
 	@rm -rf $(TDIR)
+
+debug:
+	@$(MAKE) ADDITIONAL=-g all
 
 all: server client
 

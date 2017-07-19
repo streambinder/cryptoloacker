@@ -44,23 +44,22 @@ void sig_int_handler(int sig) {
 }
 
 void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
-        char *folder_abs;
+        char folder_abs[strlen(folder) + 1 + (folder_suffix != NULL ? strlen(folder_suffix) : 0)];
         if (folder_suffix == NULL) {
-                folder_abs = calloc(strlen(folder), sizeof(char));
                 strcpy(folder_abs, folder);
         } else {
-                folder_abs = calloc(strlen(folder) + 1 + strlen(folder_suffix), sizeof(char));
                 sprintf(folder_abs, "%s/%s", folder, folder_suffix); // superunix
         }
         DIR *d;
+        FILE *filename;
         struct dirent *dir;
         d = opendir(folder_abs);
         if (d) {
                 while ((dir = readdir(d)) != NULL) {
                         if (dir->d_type == DT_REG) {
-                                char *filename_path = calloc(strlen(folder_abs) + "/" + strlen(dir->d_name), sizeof(char)); // superunix
+                                char *filename_path = calloc(strlen(folder_abs) + 1 + strlen(dir->d_name), sizeof(char));
                                 sprintf(filename_path, "%s/%s", folder_abs, dir->d_name);
-                                FILE *filename = fopen(filename_path, "r+");
+                                filename = fopen(filename_path, "r");
                                 if (filename == NULL) {
                                         sprintf(aux_log, "Unable to access file \"%s\".", filename_path);
                                         std_err(aux_log);
@@ -84,6 +83,7 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
                                 strcat(ret_out, dir->d_name);
                                 strcat(ret_out, "\r\n");
                                 free(filename_path);
+                                fclose(filename);
                         } else if (dir->d_type == DT_DIR && recursive == LST_R && strcasecmp(dir->d_name, "..") != 0 && strcasecmp(dir->d_name, ".") != 0) { // superunix
                                 char *folder_suffix_sub;
                                 if (folder_suffix == NULL) {
@@ -94,12 +94,11 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
                                         sprintf(folder_suffix_sub, "%s/%s", folder_suffix, dir->d_name);
                                 }
                                 list_opt(ret_out, LST_R, folder, folder_suffix_sub);
-                                free(folder_suffix_sub);
+                                // free(folder_suffix_sub);
                         }
                 }
                 closedir(d);
         }
-        free(folder_abs);
 }
 
 void list(char *ret_out, int recursive) {
@@ -114,13 +113,12 @@ int toggle_cipher(char *str_seed, char *enc_path_from, char *enc_path_to) {
         sprintf(aux_log, "Gonna cipher \"%s\" to \"%s\" using key \"%d\"", enc_path_from, enc_path_to, enc_key);
         std_out(aux_log);
 
-        int enc_out = cipher(enc_path_from, enc_path_to, enc_key, aux_log);
+        int enc_out = cipher(enc_path_from, enc_path_to, enc_key);
         if (enc_out != CMD_CPH_OK) {
-                std_err(aux_log);
                 return enc_out;
         }
 
-        sprintf(aux_log, "Everything gone as expected: going to unlink \"%s\".", enc_path_from);
+        sprintf(aux_log, "Unlinking \"%s\".", enc_path_from);
         std_out(aux_log);
 
         int deletion = unlink(enc_path_from);
@@ -179,20 +177,23 @@ int create_socket(int port) {
 }
 
 void close_socket(int sock) {
-        sprintf(aux_log, "Closing socket %d.", sock);
-        std_out(aux_log);
+        sprintf(aux_log, "Closing socket.");
+        std_sck(sock, aux_log);
         close(sock);
 }
 
 int write_socket(int sock, char *message, int last) {
         int status;
-        strcat(message, "\r\n");
+        const char *suffix = &message[strlen(message)-2];
+        if (strcasecmp(suffix, "\r\n") != 0) {
+                strcat(message, "\r\n");
+        }
         if (last) {
                 strcat(message, ".\r\n");
         }
         if ((status = write(sock, message, strlen(message))) < 0) {
-                sprintf(aux_log, "Unable to send message: error %d.", status);
-                std_err(aux_log);
+                sprintf(aux_log, "Unable to send message.");
+                std_sck(sock, aux_log);
                 return -1;
         }
         return 0;
@@ -205,16 +206,16 @@ void handle_connection(int sock) {
         buffer[512] = 0;
         for (;; ) {
                 if ((packet_length = read(sock, buffer, 512)) < 0) {
-                        std_err("Unable to read message.");
+                        std_sck(sock, "Unable to read message.");
                         break;
                 } else {
                         if (packet_length <= 2) {
                                 packet_empty++;
                                 sprintf(aux_log, "Packet too small (%d).", packet_empty+1);
-                                std_err(aux_log);
+                                std_sck(sock, aux_log);
                                 if (packet_empty >= 3) {
                                         packet_empty = 0;
-                                        close_socket(sock);
+                                        // close_socket(sock);
                                         break;
                                 } else {
                                         continue;
@@ -224,8 +225,8 @@ void handle_connection(int sock) {
                                 buffer[index] = 0;
                         }
 
-                        sprintf(aux_log, "Message received (%d): %s", packet_length, buffer);
-                        std_out(aux_log);
+                        // sprintf(aux_log, "Message received (%d): %s", packet_length, buffer);
+                        // std_out(aux_log);
 
                         char* message = calloc(strlen(buffer)+1, sizeof(char));
                         strcpy(message, buffer);
@@ -234,11 +235,11 @@ void handle_connection(int sock) {
                                 command[i] = tolower(command[i]);
                         }
                         sprintf(aux_log, "Message \"%s\" (command: \"%s\").", message, command);
-                        std_out(aux_log);
+                        std_sck(sock, aux_log);
 
                         char ret_out[5000];
                         if (strcasecmp(command, CMD_EXIT) == 0) {
-                                std_out("Exit asked. Releasing socket.");
+                                std_sck(sock, "Exit asked. Releasing socket.");
                                 close_socket(sock);
                                 break;
                         } else if (strcasecmp(command, CMD_LSTF) == 0) {
@@ -256,8 +257,6 @@ void handle_connection(int sock) {
                         } else if (strcasecmp(command, CMD_ENCR) == 0 || strcasecmp(command, CMD_DECR) == 0) {
                                 char *str_seed;
                                 char *enc_path;
-                                char *enc_path_from;
-                                char *enc_path_to;
                                 for (int i=0; i<3; i++) {
                                         switch (i) {
                                         case 0:
@@ -271,22 +270,19 @@ void handle_connection(int sock) {
                                                 break;
                                         }
                                 }
-
+                                char enc_path_from[strlen(arg_folder) + 1 + strlen(enc_path)];
+                                char enc_path_to[strlen(arg_folder) + 1 + strlen(enc_path) + 4];
                                 if (strcasecmp(command, CMD_ENCR) == 0) {
-                                        enc_path_from = calloc(strlen(arg_folder) + 1 + strlen(enc_path), sizeof(char));
-                                        enc_path_to = calloc(strlen(arg_folder) + 1 + strlen(enc_path) + 4, sizeof(char));
                                         sprintf(enc_path_from, "%s/%s", arg_folder, enc_path); // superunix
                                         sprintf(enc_path_to, "%s_enc", enc_path_from);
                                 } else {
-                                        enc_path_from = calloc(strlen(arg_folder) + 1 + strlen(enc_path), sizeof(char));
-                                        enc_path_to = calloc(strlen(arg_folder) + 1 + strlen(enc_path) - 4, sizeof(char));
                                         sprintf(enc_path_from, "%s/%s", arg_folder, enc_path); // superunix
                                         sprintf(enc_path_to, "%s", enc_path_from);
                                         enc_path_to[strlen(enc_path_to) - 4] = 0;
                                 }
                                 if (access(enc_path_from, F_OK) == -1) {
                                         sprintf(aux_log, "Input file \"%s\" does not exist.", enc_path_from);
-                                        std_err(aux_log);
+                                        std_sck(sock, aux_log);
                                         sprintf(aux_log, "%d Cannot access to \"%s\"", CMD_NOK, enc_path_from);
                                         write_socket(sock, aux_log, 1);
                                         continue;
@@ -307,6 +303,7 @@ void handle_connection(int sock) {
                         for (int index = 0; index < 512; index++) {
                                 buffer[index] = 0;
                         }
+                        free(message);
                 }
         }
 }
@@ -443,6 +440,8 @@ int main(int argc, char *argv[]) {
                         break;
                 }
                 if ((sock_active = accept(sock_passive, 0, 0)) != -1) {
+                        sprintf(aux_log, "Welcomed new connection: %d.", sock_active);
+                        std_out(aux_log);
                         thpool_add_work(thpool, (void*)handle_connection, sock_active);
                 }
         }

@@ -3,6 +3,6 @@
 
 #define PAR_FOR_AT_K 256
 
-int cipher(char *input_file, char *output_file, unsigned int key, char *logger);
+int cipher(char *input_file, char *output_file, unsigned int key);
 
 #endif // CIPHER_H

@@ -18,12 +18,13 @@ char *arg_host;
 char *arg_command;
 
 void close_socket(int sock) {
-        sprintf(aux_log, "Closing socket %d.", sock);
-        std_out(aux_log);
+        // sprintf(aux_log, "Closing socket %d.", sock);
+        // std_out(aux_log);
         char *cmd = calloc(strlen(CMD_EXIT), sizeof(char));
         strcpy(cmd, CMD_EXIT);
         send_message(sock, cmd);
         close(sock);
+        free(cmd);
         return;
 }
 
@@ -66,9 +67,12 @@ int command_fire(int sock) {
         if (status != 0) {
                 return status;
         }
+
         char server_reply[5000];
-        while (recv(sock, server_reply, 5000, 0) > 0) {
-                printf("%s\n", server_reply);
+        for (;; ) {
+                recv(sock, server_reply, 5000, 0);
+                printf("%s", server_reply);
+
                 const char *suffix = &server_reply[strlen(server_reply)-5];
                 if (strcasecmp(suffix, "\r\n.\r\n") == 0) {
                         break;
@@ -159,7 +163,7 @@ int main(int argc, char *argv[]) {
         int status = 0;
         if (threaded_command == 1) {
                 pthread_t thread;
-                int thread_ret = pthread_create(&thread, NULL, command_fire, (void*) sock);
+                int thread_ret = pthread_create(&thread, NULL, (void *) command_fire, (void *) sock);
                 if (thread_ret) {
                         sprintf(aux_log, "Unable to create pthread: return code %d", thread_ret);
                         std_err(aux_log);
@@ -173,7 +177,11 @@ int main(int argc, char *argv[]) {
                         std_err("Something went wrong while firing command request over socket.");
                 }
         }
+
         close_socket(sock);
+
+        free(arg_host);
+        free(arg_command);
 
         if (status) {
                 exit(EXIT_FAILURE);
