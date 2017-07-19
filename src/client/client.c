@@ -1,6 +1,7 @@
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
+#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -17,6 +18,11 @@ char *arg_host;
 char *arg_command;
 
 void close_socket(int sock) {
+        sprintf(aux_log, "Closing socket %d.", sock);
+        std_out(aux_log);
+        char *cmd = calloc(strlen(CMD_EXIT), sizeof(char));
+        strcpy(cmd, CMD_EXIT);
+        send_message(sock, cmd);
         close(sock);
         return;
 }
@@ -39,17 +45,36 @@ int create_socket(char* dest, int port) {
         sock = socket(AF_INET, SOCK_STREAM, 0);
 
         error = connect(sock, (struct sockaddr*) &temp, sizeof(temp));
+        if (error != 0) {
+                return -1;
+        }
+
         return sock;
 }
 
-void send_message(int sock, char* message) {
+int send_message(int sock, char* message) {
         strcat(message, "\r\n");
         if (write(sock, message, strlen(message)) < 0) {
                 std_err("Unable to send message.");
-                close_socket(sock);
-                exit(EXIT_FAILURE);
+                return -1;
         }
-        return;
+        return 0;
+}
+
+int command_fire(int sock) {
+        int status = send_message(sock, arg_command);
+        if (status != 0) {
+                return status;
+        }
+        char server_reply[5000];
+        while (recv(sock, server_reply, 5000, 0) > 0) {
+                printf("%s\n", server_reply);
+                const char *suffix = &server_reply[strlen(server_reply)-5];
+                if (strcasecmp(suffix, "\r\n.\r\n") == 0) {
+                        break;
+                }
+        }
+        return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -58,6 +83,8 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
         }
 
+        int threaded_command = 0;
+
         for (int i = 0; i < argc; i++) {
                 if (strcasecmp(argv[i], "-l") == 0 || strcasecmp(argv[i], "-R") == 0) {
                         arg_command = calloc(strlen(CMD_LSTF), sizeof(char));
@@ -65,6 +92,7 @@ int main(int argc, char *argv[]) {
                         continue;
                 }
                 if (strcasecmp(argv[i], "-e") == 0 || strcasecmp(argv[i], "-d") == 0) {
+                        threaded_command = 1;
                         if ((i+2) < argc) {
                                 arg_command = calloc(strlen(CMD_ENCR) + 1 + strlen(argv[i+1]) + strlen(argv[i+2]), sizeof(char));
                                 sprintf(arg_command, "%s %s %s", (strcasecmp(argv[i], "-e") == 0) ? CMD_ENCR : CMD_DECR, argv[i+1], argv[i+2]);
@@ -118,25 +146,38 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
         }
 
-        sprintf(aux_log, "Config { host=\"%s\", port=%d, command=\"%s\" }", arg_host, arg_port, arg_command);
-        std_out(aux_log);
 
-        char server_reply[5000];
-        sock = create_socket("127.0.0.1", 8888);
-        if (sock == EXIT_FAILURE) {
+        // sprintf(aux_log, "Config { host=\"%s\", port=%d, command=\"%s\" }", arg_host, arg_port, arg_command);
+        // std_out(aux_log);
+
+        sock = create_socket(arg_host, 8888);
+        if (sock == -1) {
                 std_err("Something went wrong while instanciating socket. Exiting.");
                 exit(EXIT_FAILURE);
         }
 
-        send_message(sock, arg_command);
-        while (recv(sock, server_reply, 5000, 0) > 0) {
-                printf("%s\n", server_reply);
-                const char *suffix = &server_reply[strlen(server_reply)-5];
-                if (strcasecmp(suffix, "\r\n.\r\n") == 0) {
-                        break;
+        int status = 0;
+        if (threaded_command == 1) {
+                pthread_t thread;
+                int thread_ret = pthread_create(&thread, NULL, command_fire, (void*) sock);
+                if (thread_ret) {
+                        sprintf(aux_log, "Unable to create pthread: return code %d", thread_ret);
+                        std_err(aux_log);
+                        status = 1;
+
+                }
+                pthread_join(thread, NULL);
+        } else {
+                status = command_fire(sock);
+                if (status != 0) {
+                        std_err("Something went wrong while firing command request over socket.");
                 }
         }
         close_socket(sock);
 
-        exit(EXIT_SUCCESS);
+        if (status) {
+                exit(EXIT_FAILURE);
+        } else {
+                exit(EXIT_SUCCESS);
+        }
 }

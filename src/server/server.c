@@ -24,14 +24,22 @@ char *arg_folder;
 char *arg_config;
 int arg_port = 0;
 int arg_threads = 0;
+int exit_asked = 0;
 
-void signal_handler(int sig) {
+void sig_hup_handler(int sig) {
         if (sig == SIGHUP) {
-                std_out("Received: flushing configuration.");
+                std_out("SIGHUP: flushing configuration.");
                 int status = inherit_configuration(arg_config);
                 if (status != 0) {
                         std_err("Unable to read configuration. Check syntax.");
                 }
+        }
+}
+
+void sig_int_handler(int sig) {
+        if (sig == SIGINT) {
+                std_out("SIGINT: triggering exit.");
+                exit_asked = 1;
         }
 }
 
@@ -42,7 +50,7 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
                 strcpy(folder_abs, folder);
         } else {
                 folder_abs = calloc(strlen(folder) + 1 + strlen(folder_suffix), sizeof(char));
-                sprintf(folder_abs, "%s/%s", folder, folder_suffix);
+                sprintf(folder_abs, "%s/%s", folder, folder_suffix); // superunix
         }
         DIR *d;
         struct dirent *dir;
@@ -171,19 +179,20 @@ int create_socket(int port) {
 }
 
 void close_socket(int sock) {
-        std_out("Closing socket.");
+        sprintf(aux_log, "Closing socket %d.", sock);
+        std_out(aux_log);
         close(sock);
-        return;
 }
 
 int write_socket(int sock, char *message, int last) {
+        int status;
         strcat(message, "\r\n");
-        if (last == 1) {
+        if (last) {
                 strcat(message, ".\r\n");
         }
-        if (write(sock, message, strlen(message)) < 0) {
-                std_err("Unable to send message. Closing socket.");
-                close_socket(sock);
+        if ((status = write(sock, message, strlen(message))) < 0) {
+                sprintf(aux_log, "Unable to send message: error %d.", status);
+                std_err(aux_log);
                 return -1;
         }
         return 0;
@@ -192,6 +201,7 @@ int write_socket(int sock, char *message, int last) {
 void handle_connection(int sock) {
         char buffer[512+1];
         int packet_length;
+        int packet_empty = 0;
         buffer[512] = 0;
         for (;; ) {
                 if ((packet_length = read(sock, buffer, 512)) < 0) {
@@ -199,19 +209,24 @@ void handle_connection(int sock) {
                         break;
                 } else {
                         if (packet_length <= 2) {
-                                std_err("Packet too small. Exiting.");
-                                close_socket(sock);
-                                break;
+                                packet_empty++;
+                                sprintf(aux_log, "Packet too small (%d).", packet_empty+1);
+                                std_err(aux_log);
+                                if (packet_empty >= 3) {
+                                        packet_empty = 0;
+                                        close_socket(sock);
+                                        break;
+                                } else {
+                                        continue;
+                                }
                         }
-                        // clean buffer (not on packet)
                         for (int index = packet_length-2; index < 512; index++) {
                                 buffer[index] = 0;
                         }
 
-                        // sprintf(aux_log, "Message received (%d): %s", packet_length, buffer);
-                        // std_out(aux_log);
+                        sprintf(aux_log, "Message received (%d): %s", packet_length, buffer);
+                        std_out(aux_log);
 
-                        // trap command a reduce it to lowercase
                         char* message = calloc(strlen(buffer)+1, sizeof(char));
                         strcpy(message, buffer);
                         char *command = strtok(buffer, " ");
@@ -223,7 +238,7 @@ void handle_connection(int sock) {
 
                         char ret_out[5000];
                         if (strcasecmp(command, CMD_EXIT) == 0) {
-                                std_out("Exit asked. Quitting.");
+                                std_out("Exit asked. Releasing socket.");
                                 close_socket(sock);
                                 break;
                         } else if (strcasecmp(command, CMD_LSTF) == 0) {
@@ -406,29 +421,37 @@ int main(int argc, char *argv[]) {
         std_out(aux_log);
         thpool = thpool_init(arg_threads);
 
-        std_out("Trying to catch SIGHUP signals.");
-        if (signal(SIGHUP, signal_handler) == SIG_ERR) {
+        std_out("Configuring SIGHUP signals catching.");
+        if (signal(SIGHUP, sig_hup_handler) == SIG_ERR) {
                 std_err("Unable to handle SIGHUP.");
         }
 
-        int sock_descriptor, sock_new;
+        std_out("Configuring SIGINT signals catching.");
+        if (signal(SIGINT, sig_int_handler) == SIG_ERR) {
+                std_err("Unable to handle SIGINT.");
+        }
+
+        int sock_passive;
         int exit_condition = 0;
 
-        sock_descriptor = create_socket(arg_port);
+        sock_passive = create_socket(arg_port);
 
         std_out("Waiting for connections.");
         for (;; ) {
-                if ((sock_new = accept(sock_descriptor, 0, 0)) != -1) {
-                        thpool_add_work(thpool, (void*)handle_connection, sock_new);
+                int sock_active;
+                if (exit_asked) {
+                        break;
+                }
+                if ((sock_active = accept(sock_passive, 0, 0)) != -1) {
+                        thpool_add_work(thpool, (void*)handle_connection, sock_active);
                 }
         }
 
-        close_socket(sock_new);
-        close_socket(sock_descriptor);
-        std_out("Exited.");
-
         thpool_wait(thpool);
         thpool_destroy(thpool);
+
+        close_socket(sock_passive);
+        std_out("Exited.");
 
         return 0;
 }
