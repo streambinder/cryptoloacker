@@ -120,7 +120,7 @@ int cipher(char *input_file, char *output_file, unsigned long seed) {
         }
 
         int key_unmap = munmap(key_map, input_size-1);
-        if (output_unmap < 0) {
+        if (key_unmap < 0) {
                 std_err("Something wrong while memory-unmapping key map.");
         }
 

@@ -44,20 +44,19 @@ void sig_int_handler(int sig) {
 }
 
 void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
-        char folder_abs[strlen(folder) + 1 + (folder_suffix != NULL ? strlen(folder_suffix) : 0)];
+        char folder_abs[strlen(folder) + 2 + (folder_suffix != NULL ? strlen(folder_suffix) + 1 : 0)];
         if (folder_suffix == NULL) {
                 strcpy(folder_abs, folder);
         } else {
                 sprintf(folder_abs, "%s/%s", folder, folder_suffix); // superunix
         }
-        DIR *d;
+        DIR *d = opendir(folder_abs);
         FILE *filename;
         struct dirent *dir;
-        d = opendir(folder_abs);
         if (d) {
                 while ((dir = readdir(d)) != NULL) {
                         if (dir->d_type == DT_REG) {
-                                char *filename_path = calloc(strlen(folder_abs) + 1 + strlen(dir->d_name), sizeof(char));
+                                char *filename_path = calloc(strlen(folder_abs) + 2 + strlen(dir->d_name) + 1, sizeof(char)); // superunix
                                 sprintf(filename_path, "%s/%s", folder_abs, dir->d_name);
                                 filename = fopen(filename_path, "r");
                                 if (filename == NULL) {
@@ -82,19 +81,25 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
                                 }
                                 strcat(ret_out, dir->d_name);
                                 strcat(ret_out, "\r\n");
-                                free(filename_path);
-                                fclose(filename);
+                                if (filename != NULL) {
+                                        fclose(filename);
+                                }
+                                if (filename_path != NULL) {
+                                        free(filename_path);
+                                }
                         } else if (dir->d_type == DT_DIR && recursive == LST_R && strcasecmp(dir->d_name, "..") != 0 && strcasecmp(dir->d_name, ".") != 0) { // superunix
                                 char *folder_suffix_sub;
                                 if (folder_suffix == NULL) {
-                                        folder_suffix_sub = calloc(strlen(dir->d_name), sizeof(char));
+                                        folder_suffix_sub = calloc(strlen(dir->d_name) + 1, sizeof(char));
                                         strcpy(folder_suffix_sub, dir->d_name);
                                 } else {
-                                        folder_suffix_sub = calloc(strlen(folder_suffix) + 1 + strlen(dir->d_name), sizeof(char)); // superunix
+                                        folder_suffix_sub = calloc(strlen(folder_suffix) + 2 + strlen(dir->d_name) + 1, sizeof(char)); // superunix
                                         sprintf(folder_suffix_sub, "%s/%s", folder_suffix, dir->d_name);
                                 }
                                 list_opt(ret_out, LST_R, folder, folder_suffix_sub);
-                                // free(folder_suffix_sub);
+                                if (folder_suffix_sub) {
+                                        free(folder_suffix_sub);
+                                }
                         }
                 }
                 closedir(d);
@@ -164,7 +169,7 @@ int write_socket(int sock, char *message, int last) {
         if (last) {
                 strcat(message, ".\r\n");
         }
-        if ((status = write(sock, message, strlen(message))) < 0) {
+        if ((status = write(sock, message, strlen(message) + 1)) < 0) {
                 sprintf(aux_log, "Unable to send message.");
                 std_sck(sock, aux_log);
                 return -1;
@@ -201,7 +206,7 @@ void handle_connection(int sock) {
                         // sprintf(aux_log, "Message received (%d): %s", packet_length, buffer);
                         // std_out(aux_log);
 
-                        char* message = calloc(strlen(buffer)+1, sizeof(char));
+                        char *message = calloc(strlen(buffer) + 1, sizeof(char));
                         strcpy(message, buffer);
                         char *command = strtok(buffer, " ");
                         for(int i = 0; command[i]; i++) {
@@ -210,7 +215,7 @@ void handle_connection(int sock) {
                         sprintf(aux_log, "Message \"%s\" (command: \"%s\").", message, command);
                         std_sck(sock, aux_log);
 
-                        char ret_out[5000];
+                        char ret_out[1000000];
                         if (strcasecmp(command, CMD_EXIT) == 0) {
                                 close_socket(sock);
                                 break;
@@ -332,7 +337,7 @@ int inherit_configuration(char *config_file) {
                         } else if (strcasecmp(config_key, "folder") == 0) {
                                 sprintf(aux_log, "config: found \"%s\" value \"%s\".", config_key, config_value);
                                 std_out(aux_log);
-                                arg_folder = calloc(strlen(config_value), sizeof(char));
+                                arg_folder = calloc(strlen(config_value) + 1, sizeof(char));
                                 strcpy(arg_folder, config_value);
                         } else {
                                 sprintf(aux_log, "config: key \"%s\" not recognized, ignored.", config_key);

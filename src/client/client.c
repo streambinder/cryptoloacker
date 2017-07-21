@@ -161,14 +161,16 @@ int main(int argc, char *argv[]) {
         // sprintf(aux_log, "Config { host=\"%s\", port=%d, command=\"%s\" }", arg_host, arg_port, arg_command);
         // std_out(aux_log);
 
-        log_file = fopen(LOG_FILE, "a");
-        if (log_file == NULL) {
-                sprintf(aux_log, "Unable to open log %s.", LOG_FILE);
-                std_err(aux_log);
-                exit(EXIT_FAILURE);
-        } else {
-                // sprintf(aux_log, "Logging to %s.", LOG_FILE);
-                // std_out(aux_log);
+        if (command_log) {
+                log_file = fopen(LOG_FILE, "a");
+                if (log_file == NULL) {
+                        sprintf(aux_log, "Unable to open log %s.", LOG_FILE);
+                        std_err(aux_log);
+                        exit(EXIT_FAILURE);
+                } else {
+                        // sprintf(aux_log, "Logging to %s.", LOG_FILE);
+                        // std_out(aux_log);
+                }
         }
 
         sock = create_socket(arg_host, 8888);
