@@ -27,7 +27,7 @@ int cipher(char *input_file, char *output_file, unsigned long seed) {
                 sprintf(aux_log, "Unable to get lock on input file \"%s\".", input_file);
                 std_err(aux_log);
                 close(input);
-                return CMD_LST_OK;
+                return CMD_TRNS_NOK;
         }
         int input_size = lseek(input, 0, SEEK_END);
         if (input_size == -1) {

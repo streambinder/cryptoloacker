@@ -20,8 +20,8 @@
 
 #define CMD_CPH_OK 200
 #define CMD_LST_OK 300
-#define CMD_TRNS_NOK 400
-#define CMD_NOK 500
+#define CMD_NOK 400
+#define CMD_TRNS_NOK 500
 
 #define std_out(arg)        fprintf(stdout, ANSI_COLOR_GREEN    "%s    "    ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
 #define std_err(arg)        fprintf(stderr, ANSI_COLOR_RED      "%s    "    ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
