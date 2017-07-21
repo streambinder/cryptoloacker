@@ -8,14 +8,19 @@
 #include <sys/socket.h>
 #include <sys/types.h>
 
+#include "client.h"
 #include "opt.h"
 
 int arg_port = 0;
+int command_threaded = 0;
+int command_log = 0;
 int sock;
 
 char aux_log[100];
 char *arg_host;
 char *arg_command;
+
+FILE *log_file;
 
 void close_socket(int sock) {
         // sprintf(aux_log, "Closing socket %d.", sock);
@@ -68,6 +73,10 @@ int command_fire(int sock) {
                 return status;
         }
 
+        if (log_file != NULL && command_log) {
+                fprintf(log_file, "%s", arg_command);
+        }
+
         char server_reply[5000];
         for (;; ) {
                 recv(sock, server_reply, 5000, 0);
@@ -87,8 +96,6 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
         }
 
-        int threaded_command = 0;
-
         for (int i = 0; i < argc; i++) {
                 if (strcasecmp(argv[i], "-l") == 0 || strcasecmp(argv[i], "-R") == 0) {
                         arg_command = calloc(strlen(CMD_LSTF), sizeof(char));
@@ -96,7 +103,8 @@ int main(int argc, char *argv[]) {
                         continue;
                 }
                 if (strcasecmp(argv[i], "-e") == 0 || strcasecmp(argv[i], "-d") == 0) {
-                        threaded_command = 1;
+                        command_threaded = 1;
+                        command_log = 1;
                         if ((i+2) < argc) {
                                 arg_command = calloc(strlen(CMD_ENCR) + 1 + strlen(argv[i+1]) + strlen(argv[i+2]), sizeof(char));
                                 sprintf(arg_command, "%s %s %s", (strcasecmp(argv[i], "-e") == 0) ? CMD_ENCR : CMD_DECR, argv[i+1], argv[i+2]);
@@ -150,9 +158,18 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
         }
 
-
         // sprintf(aux_log, "Config { host=\"%s\", port=%d, command=\"%s\" }", arg_host, arg_port, arg_command);
         // std_out(aux_log);
+
+        log_file = fopen(LOG_FILE, "a");
+        if (log_file == NULL) {
+                sprintf(aux_log, "Unable to open log %s.", LOG_FILE);
+                std_err(aux_log);
+                exit(EXIT_FAILURE);
+        } else {
+                // sprintf(aux_log, "Logging to %s.", LOG_FILE);
+                // std_out(aux_log);
+        }
 
         sock = create_socket(arg_host, 8888);
         if (sock == -1) {
@@ -161,14 +178,13 @@ int main(int argc, char *argv[]) {
         }
 
         int status = 0;
-        if (threaded_command == 1) {
+        if (command_threaded == 1) {
                 pthread_t thread;
                 int thread_ret = pthread_create(&thread, NULL, (void *) command_fire, (void *) sock);
                 if (thread_ret) {
                         sprintf(aux_log, "Unable to create pthread: return code %d", thread_ret);
                         std_err(aux_log);
                         status = 1;
-
                 }
                 pthread_join(thread, NULL);
         } else {
@@ -180,8 +196,15 @@ int main(int argc, char *argv[]) {
 
         close_socket(sock);
 
-        free(arg_host);
-        free(arg_command);
+        if (log_file != NULL) {
+                fclose(log_file);
+        }
+        if (arg_host != NULL) {
+                free(arg_host);
+        }
+        if (arg_command != NULL) {
+                free(arg_command);
+        }
 
         if (status) {
                 exit(EXIT_FAILURE);
