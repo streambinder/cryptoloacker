@@ -14,7 +14,7 @@
 
 char aux_log[250];
 
-int cipher(char *input_file, char *output_file, unsigned int key) {
+int cipher(char *input_file, char *output_file, unsigned long seed) {
         // input file
         int input = open(input_file, O_RDONLY, 0);
         if (input == -1) {
@@ -77,6 +77,18 @@ int cipher(char *input_file, char *output_file, unsigned int key) {
                 return CMD_NOK;
         }
 
+        int *key_map = mmap(NULL, input_size-1, PROT_READ | PROT_WRITE, MAP_SHARED | MAP_ANONYMOUS, -1, 0);
+        if (key_map == MAP_FAILED) {
+                std_err("Unable to memory-map key map.");
+                close(output);
+                close(input);
+                return CMD_NOK;
+        } else {
+                for (int i = 0; i < input_size/4.; i++) {
+                        key_map[i] = rand_r(&seed);
+                }
+        }
+
         // XOR data and write to file
         uint64_t i,j;
         uint64_t upperbound_in;
@@ -87,7 +99,7 @@ int cipher(char *input_file, char *output_file, unsigned int key) {
                 for(i = 0; i < upperbound_in; i++) {
                         uint64_t index = PAR_FOR_AT_K*1024*j + i;
                         if (index < input_size/4.) {
-                                output_map[index] = input_map[index] ^ key;
+                                output_map[index] = input_map[index] ^ key_map[index];
                         }
                 }
         }
@@ -105,6 +117,11 @@ int cipher(char *input_file, char *output_file, unsigned int key) {
                 std_err(aux_log);
                 close(output);
                 return CMD_NOK;
+        }
+
+        int key_unmap = munmap(key_map, input_size-1);
+        if (output_unmap < 0) {
+                std_err("Something wrong while memory-unmapping key map.");
         }
 
         return CMD_CPH_OK;

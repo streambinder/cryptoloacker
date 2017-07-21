@@ -105,33 +105,6 @@ void list(char *ret_out, int recursive) {
         list_opt(ret_out, recursive, arg_folder, NULL);
 }
 
-int toggle_cipher(char *str_seed, char *enc_path_from, char *enc_path_to) {
-        int enc_seed = atoi(str_seed);
-        srand(enc_seed);
-        unsigned int enc_key = rand();
-
-        sprintf(aux_log, "Gonna cipher \"%s\" to \"%s\" using key \"%d\"", enc_path_from, enc_path_to, enc_key);
-        std_out(aux_log);
-
-        int enc_out = cipher(enc_path_from, enc_path_to, enc_key);
-        if (enc_out != CMD_CPH_OK) {
-                return enc_out;
-        }
-
-        sprintf(aux_log, "Unlinking \"%s\".", enc_path_from);
-        std_out(aux_log);
-
-        int deletion = unlink(enc_path_from);
-        if (deletion < 0) {
-                std_err("Something went wrong during file deletion.");
-                return CMD_NOK;
-        } else {
-                std_out("Succesfully ciphered.");
-        }
-
-        return CMD_CPH_OK;
-}
-
 int create_socket(int port) {
         std_out("Allocating variables.");
         int sock, status;
@@ -239,7 +212,6 @@ void handle_connection(int sock) {
 
                         char ret_out[5000];
                         if (strcasecmp(command, CMD_EXIT) == 0) {
-                                std_sck(sock, "Exit asked. Releasing socket.");
                                 close_socket(sock);
                                 break;
                         } else if (strcasecmp(command, CMD_LSTF) == 0) {
@@ -287,13 +259,29 @@ void handle_connection(int sock) {
                                         write_socket(sock, aux_log, 1);
                                         continue;
                                 }
-                                int ret_code = toggle_cipher(str_seed, enc_path_from, enc_path_to);
-                                if (ret_code == CMD_CPH_OK) {
-                                        sprintf(aux_log, "%d Applied %s on \"%s\"", ret_code, command, enc_path_from);
+
+                                char *ptr;
+                                unsigned long seed;
+                                seed = strtoul(str_seed, &ptr, 10);
+                                sprintf(aux_log, "Gonna cipher using seed \"%lu\"", seed);
+                                std_out(aux_log);
+
+                                int status = cipher(enc_path_from, enc_path_to, seed);
+                                if (status != CMD_CPH_OK) {
+                                        sprintf(aux_log, "%d Unable to apply %s on \"%s\"", status, command, enc_path_from);
+                                        std_err(aux_log);
+                                        write_socket(sock, aux_log, 1);
                                 } else {
-                                        sprintf(aux_log, "%d Unable to apply %s on \"%s\"", ret_code, command, enc_path_from);
+                                        sprintf(aux_log, "Unlinking \"%s\".", enc_path_from);
+                                        std_out(aux_log);
+
+                                        if (unlink(enc_path_from)) {
+                                                std_err("Something went wrong during file deletion.");
+                                        } else {
+                                                sprintf(aux_log, "%d Applied %s on \"%s\"", status, command, enc_path_from);
+                                                write_socket(sock, aux_log, 1);
+                                        }
                                 }
-                                write_socket(sock, aux_log, 1);
                         } else {
                                 sprintf(ret_out, "Command not recognized.");
                                 write_socket(sock, ret_out, 1);
