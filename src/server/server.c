@@ -18,7 +18,7 @@
 #include "stringer.h"
 #include "threadpool.h"
 
-threadpool thpool;
+threadpool *thpool;
 char aux_log[100];
 char *arg_folder;
 char *arg_config;
