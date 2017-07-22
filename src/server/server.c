@@ -26,6 +26,57 @@ int arg_port = 0;
 int arg_threads = 0;
 int exit_asked = 0;
 
+int inherit_configuration(char *config_file) {
+        if (access(arg_config, F_OK) == -1) {
+                sprintf(aux_log, "config: file \"%s\" seems not to be existing.", arg_config);
+                std_err(aux_log);
+                return 1;
+        } else {
+                FILE *config;
+                char *line = NULL;
+                size_t len = 0;
+                ssize_t read;
+
+                config = fopen(config_file, "r");
+                if (config == NULL) {
+                        return 1;
+                }
+                char *config_key, *config_value;
+                while ((read = getline(&line, &len, config)) != -1) {
+                        line[read-1] = 0;
+                        sprintf(aux_log, "config: line of lenght %zu: \"%s\"", read, line);
+                        std_out(aux_log);
+                        config_key = strtok(line, "=");
+                        config_value = strtok(NULL, "=");
+                        config_key = trim(config_key);
+                        config_value = trim(config_value);
+                        if (strcasecmp(config_key, "port") == 0) {
+                                sprintf(aux_log, "config: found \"%s\" value \"%s\".", config_key, config_value);
+                                std_out(aux_log);
+                                if (!isdigit(*config_value)) {
+                                        sprintf(aux_log, "config: \"%s\" key value \"%s\" must be integer parseable.", config_key, config_value);
+                                        std_err(aux_log);
+                                        return 1;
+                                }
+                                arg_port = atoi(config_value);
+                        } else if (strcasecmp(config_key, "folder") == 0) {
+                                sprintf(aux_log, "config: found \"%s\" value \"%s\".", config_key, config_value);
+                                std_out(aux_log);
+                                arg_folder = calloc(strlen(config_value) + 1, sizeof(char));
+                                strcpy(arg_folder, config_value);
+                        } else {
+                                sprintf(aux_log, "config: key \"%s\" not recognized, ignored.", config_key);
+                                std_err(aux_log);
+                        }
+                }
+
+                fclose(config);
+                if (line) {
+                        free(line);
+                }
+        }
+}
+
 void sig_hup_handler(int sig) {
         if (sig == SIGHUP) {
                 std_out("SIGHUP: flushing configuration.");
@@ -301,57 +352,6 @@ void handle_connection(int sock) {
         }
 }
 
-int inherit_configuration(char *config_file) {
-        if (access(arg_config, F_OK) == -1) {
-                sprintf(aux_log, "config: file \"%s\" seems not to be existing.", arg_config);
-                std_err(aux_log);
-                return 1;
-        } else {
-                FILE *config;
-                char *line = NULL;
-                size_t len = 0;
-                ssize_t read;
-
-                config = fopen(config_file, "r");
-                if (config == NULL) {
-                        return 1;
-                }
-                char *config_key, *config_value;
-                while ((read = getline(&line, &len, config)) != -1) {
-                        line[read-1] = 0;
-                        sprintf(aux_log, "config: line of lenght %zu: \"%s\"", read, line);
-                        std_out(aux_log);
-                        config_key = strtok(line, "=");
-                        config_value = strtok(NULL, "=");
-                        config_key = trim(config_key);
-                        config_value = trim(config_value);
-                        if (strcasecmp(config_key, "port") == 0) {
-                                sprintf(aux_log, "config: found \"%s\" value \"%s\".", config_key, config_value);
-                                std_out(aux_log);
-                                if (!isdigit(*config_value)) {
-                                        sprintf(aux_log, "config: \"%s\" key value \"%s\" must be integer parseable.", config_key, config_value);
-                                        std_err(aux_log);
-                                        return 1;
-                                }
-                                arg_port = atoi(config_value);
-                        } else if (strcasecmp(config_key, "folder") == 0) {
-                                sprintf(aux_log, "config: found \"%s\" value \"%s\".", config_key, config_value);
-                                std_out(aux_log);
-                                arg_folder = calloc(strlen(config_value) + 1, sizeof(char));
-                                strcpy(arg_folder, config_value);
-                        } else {
-                                sprintf(aux_log, "config: key \"%s\" not recognized, ignored.", config_key);
-                                std_err(aux_log);
-                        }
-                }
-
-                fclose(config);
-                if (line) {
-                        free(line);
-                }
-        }
-}
-
 int main(int argc, char *argv[]) {
         int opt = 0;
 
@@ -435,7 +435,7 @@ int main(int argc, char *argv[]) {
                 if ((sock_active = accept(sock_passive, 0, 0)) != -1) {
                         sprintf(aux_log, "Welcomed new connection: %d.", sock_active);
                         std_out(aux_log);
-                        thpool_add_work(thpool, (void*)handle_connection, sock_active);
+                        thpool_add_work(thpool, (void*) handle_connection, (void *)(intptr_t) sock_active);
                 }
         }
 

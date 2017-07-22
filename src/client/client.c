@@ -1,3 +1,4 @@
+#include <ctype.h>
 #include <fcntl.h>
 #include <netdb.h>
 #include <netinet/in.h>
@@ -7,6 +8,7 @@
 #include <string.h>
 #include <sys/socket.h>
 #include <sys/types.h>
+#include <unistd.h>
 
 #include "client.h"
 #include "opt.h"
@@ -21,6 +23,15 @@ char *arg_host;
 char *arg_command;
 
 FILE *log_file;
+
+int send_message(int sock, char *message) {
+        strcat(message, "\r\n");
+        if (write(sock, message, strlen(message)) < 0) {
+                std_err("Unable to send message.");
+                return -1;
+        }
+        return 0;
+}
 
 void close_socket(int sock) {
         // sprintf(aux_log, "Closing socket %d.", sock);
@@ -56,15 +67,6 @@ int create_socket(char* dest, int port) {
         }
 
         return sock;
-}
-
-int send_message(int sock, char* message) {
-        strcat(message, "\r\n");
-        if (write(sock, message, strlen(message)) < 0) {
-                std_err("Unable to send message.");
-                return -1;
-        }
-        return 0;
 }
 
 int command_fire(int sock) {
@@ -182,7 +184,7 @@ int main(int argc, char *argv[]) {
         int status = 0;
         if (command_threaded == 1) {
                 pthread_t thread;
-                int thread_ret = pthread_create(&thread, NULL, (void *) command_fire, (void *) sock);
+                int thread_ret = pthread_create(&thread, NULL, (void *) command_fire, (void *)(intptr_t) sock);
                 if (thread_ret) {
                         sprintf(aux_log, "Unable to create pthread: return code %d", thread_ret);
                         std_err(aux_log);

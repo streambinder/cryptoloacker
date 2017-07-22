@@ -14,7 +14,7 @@
 
 char aux_log[250];
 
-int cipher(char *input_file, char *output_file, unsigned long seed) {
+int cipher(char *input_file, char *output_file, unsigned int seed) {
         // input file
         int input = open(input_file, O_RDONLY, 0);
         if (input == -1) {
