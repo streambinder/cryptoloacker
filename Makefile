@@ -21,7 +21,7 @@ ODIR=$(ABSPATH)/obj
 TDIR=$(ABSPATH)/tmp
 
 CC=gcc
-CFLAGS=-O -lpthread -fopenmp $(ADDITIONAL)
+CFLAGS=-O -lm -lpthread -fopenmp $(ADDITIONAL)
 
 $(ODIR)/%:
 	$(eval SRC := $(shell echo $@ | sed 's/\.o/\.c/g' | sed "s/\/obj\//\/tmp\//g"))
