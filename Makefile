@@ -4,11 +4,11 @@ SRVR=cryptoloackerd
 CLNT=cryptoloacker
 
 ifeq ($(OS),Windows_NT)
-	PLATFORM=windows
-	PLATFORM_EXC=linux
+PLATFORM=windows
+PLATFORM_EXC=linux
 else
-	PLATFORM=linux
-	PLATFORM_EXC=windows
+PLATFORM=linux
+PLATFORM_EXC=windows
 endif
 
 ABSPATH=${CURDIR}
@@ -21,7 +21,7 @@ ODIR=$(ABSPATH)/obj
 TDIR=$(ABSPATH)/tmp
 
 CC=gcc
-CFLAGS=-O -lm -lpthread -fopenmp $(ADDITIONAL)
+CFLAGS=-O -lm -lpthread -fopenmp -D$(PLATFORM) $(ADDITIONAL)
 
 $(ODIR)/%:
 	$(eval SRC := $(shell echo $@ | sed 's/\.o/\.c/g' | sed "s/\/obj\//\/tmp\//g"))
@@ -37,7 +37,7 @@ $(BDIR)/%:
 	$(eval OBJS := $(TMPS:$(TDIR)%.c=$(ODIR)%.o))
 	@cp $(SRCS) $(HDRS) $(TDIR)/$(TRGT)/
 	@$(MAKE) TRGT=$@ $(OBJS)
-	$(CC) -o $@ $(OBJS) $(CFLAGS) -I$(TDIR)/$(TRGT) $(LIBS)
+	$(CC) -o $@ $(OBJS) -I$(TDIR)/$(TRGT) $(CFLAGS)
 
 server:
 	@$(MAKE) pre-build
@@ -55,10 +55,10 @@ pre-build:
 post-build:
 	@rm -rf $(TDIR)
 
+clean:
+	@rm -rf $(BDIR) $(ODIR) $(TDIR)
+
 debug:
 	@$(MAKE) ADDITIONAL=-g all
 
 all: server client
-
-clean:
-	@rm -rf $(BDIR) $(ODIR) $(TDIR)
