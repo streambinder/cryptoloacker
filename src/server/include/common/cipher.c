@@ -22,19 +22,24 @@ int cipher(char *input_file, char *output_file, unsigned int seed) {
                 std_err(aux_log);
                 return CMD_NOK;
         }
-        int input_lock = flock(input, LOCK_SH);
-        if (input_lock != 0) {
-                sprintf(aux_log, "Unable to get lock on input file \"%s\".", input_file);
-                std_err(aux_log);
-                close(input);
-                return CMD_TRNS_NOK;
-        }
         int input_size = lseek(input, 0, SEEK_END);
         if (input_size == -1) {
                 sprintf(aux_log, "lseek error on input file \"%s\".", input_file);
                 std_err(aux_log);
                 close(input);
                 return CMD_NOK;
+        }
+        struct flock lock;
+        lock.l_type = F_WRLCK;
+        lock.l_whence = SEEK_SET;
+        lock.l_start = 0;
+        lock.l_len = input_size;
+        lock.l_pid = getpid();
+        if(fcntl(input, F_SETLK, &lock)) {
+                sprintf(aux_log, "Unable to get lock on input file \"%s\".", input_file);
+                std_err(aux_log);
+                close(input);
+                return CMD_TRNS_NOK;
         }
         int *input_map = mmap(NULL, input_size, PROT_READ | PROT_WRITE, MAP_PRIVATE | MAP_POPULATE, input, 0);
         if (input_map == MAP_FAILED) {
@@ -122,6 +127,17 @@ int cipher(char *input_file, char *output_file, unsigned int seed) {
         int key_unmap = munmap(key_map, input_size-1);
         if (key_unmap < 0) {
                 std_err("Something wrong while memory-unmapping key map.");
+        }
+
+        struct flock lock;
+        lock.l_type = F_UNLCK;
+        lock.l_whence = SEEK_SET;
+        lock.l_start = 0;
+        lock.l_len = input_size;
+        lock.l_pid = getpid();
+        if(fcntl(input, F_SETLK, &lock)) {
+                sprintf(aux_log, "Unable to release lock on input file \"%s\".", input_file);
+                std_err(aux_log);
         }
 
         return CMD_CPH_OK;
