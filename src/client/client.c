@@ -1,76 +1,107 @@
 #include <ctype.h>
 #include <fcntl.h>
-#include <netdb.h>
-#include <netinet/in.h>
-#include <pthread.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <sys/socket.h>
 #include <sys/types.h>
 #include <unistd.h>
+
+#ifdef __linux__
+#include <errno.h>
+#include <netdb.h>
+#include <netinet/in.h>
+#include <pthread.h>
+#include <sys/socket.h>
+#elif _WIN32
+#include <winsock2.h>
+#include <windows.h>
+#pragma comment(lib, "ws2_32.lib")
+#endif
 
 #include "client.h"
 #include "opt.h"
 
-int arg_port = 0;
-int command_threaded = 0;
-int command_log = 0;
-int sock;
+static int arg_port = 0;
+static int command_threaded = 0;
+static int command_log = 0;
+static char aux_log[100];
+static char *arg_host;
+static char *arg_command;
+static sock_t sock;
 
-char aux_log[100];
-char *arg_host;
-char *arg_command;
-
-int send_message(int sock, char *message) {
+int send_message(sock_t sock, char *message) {
         strcat(message, "\r\n");
+#ifdef __linux__
         if (write(sock, message, strlen(message)) < 0) {
+#elif _WIN32
+        if (send(sock, message, strlen(message), 0) < 0) {
+#endif
                 std_err("Unable to send message.");
                 return -1;
         }
         return 0;
 }
 
-void close_socket(int sock) {
+void close_socket(sock_t sock) {
         // sprintf(aux_log, "Closing socket %d.", sock);
         // std_out(aux_log);
         char *cmd = calloc(strlen(CMD_EXIT), sizeof(char));
         strcpy(cmd, CMD_EXIT);
         send_message(sock, cmd);
+#ifdef __linux__
         close(sock);
-        free(cmd);
+#elif _WIN32
+        closesocket(sock);
+#endif
+        if (cmd != NULL) {
+                free(cmd);
+        }
         return;
 }
 
-int create_socket(char* dest, int port) {
-        struct sockaddr_in temp;
-        struct hostent *h;
-        int sock;
-        int error;
+sock_t create_socket(char* dest, int port) {
+        struct sockaddr_in server;
+        struct hostent *host;
+        sock_t sock;
 
-        temp.sin_family = AF_INET;
-        temp.sin_port = htons(port);
-        h = gethostbyname(dest);
-        if (h == 0) {
-                std_err("Failed on gethostbyname.");
+        sock = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef __linux__
+        if (sock == -1) {
+                sprintf(aux_log, "Unable to create socket: %d.", errno);
+#elif _WIN32
+        if (sock == INVALID_SOCKET) {
+                sprintf(aux_log, "Unable to create socket: %d.", WSAGetLastError());
+#endif
+                std_err(aux_log);
                 exit(EXIT_FAILURE);
         }
 
-        bcopy(h->h_addr, &temp.sin_addr, h->h_length);
-        sock = socket(AF_INET, SOCK_STREAM, 0);
+        server.sin_family = AF_INET;
+        server.sin_port = htons(port);
+        host = gethostbyname(dest);
+        if (host == NULL) {
+#ifdef __linux__
+                sprintf(aux_log, "Failed on gethostbyname: %s.", hstrerror(h_errno));
+#elif _WIN32
+                sprintf(aux_log, "Failed on gethostbyname: %d.", WSAGetLastError());
+#endif
+                std_err(aux_log);
+                exit(EXIT_FAILURE);
+        }
+        memcpy(&server.sin_addr, host->h_addr, host->h_length);
 
-        error = connect(sock, (struct sockaddr*) &temp, sizeof(temp));
-        if (error != 0) {
+        if (connect(sock, (struct sockaddr*) &server, sizeof(server)) < 0) {
+                std_err("Failed on connecting to server socket.");
                 return -1;
         }
 
         return sock;
 }
 
-int command_fire(int sock) {
+void command_fire(sock_t sock) {
         int status = send_message(sock, arg_command);
         if (status != 0) {
-                return status;
+                return;
         }
 
         if (command_log) {
@@ -85,9 +116,19 @@ int command_fire(int sock) {
                 fclose(log_file);
         }
 
+        int server_reply_size = 0;
         char server_reply[5000];
         for (;; ) {
-                recv(sock, server_reply, 5000, 0);
+                server_reply_size = recv(sock, server_reply, 5000, 0);
+#ifdef __linux__
+                if (server_reply_size == -1) {
+#elif _WIN32
+                if (server_reply_size == SOCKET_ERROR) {
+#endif
+                        std_err("Unable to read message.");
+
+                }
+                server_reply[server_reply_size] = '\0';
                 printf("%s", server_reply);
 
                 const char *suffix = &server_reply[strlen(server_reply)-5];
@@ -95,7 +136,6 @@ int command_fire(int sock) {
                         break;
                 }
         }
-        return 0;
 }
 
 int main(int argc, char *argv[]) {
@@ -166,6 +206,15 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
         }
 
+#ifdef _WIN32
+        WSADATA wsa;
+        if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
+                sprintf(aux_log, "WSA initialization failed. Code: %d.", WSAGetLastError());
+                std_err(aux_log);
+                exit(EXIT_FAILURE);
+        }
+#endif
+
         sock = create_socket(arg_host, 8888);
         if (sock == -1) {
                 std_err("Something went wrong while instanciating socket. Exiting.");
@@ -174,22 +223,34 @@ int main(int argc, char *argv[]) {
 
         int status = 0;
         if (command_threaded == 1) {
+#ifdef __linux__
                 pthread_t thread;
                 int thread_ret = pthread_create(&thread, NULL, (void *) command_fire, (void *)(intptr_t) sock);
                 if (thread_ret) {
-                        sprintf(aux_log, "Unable to create pthread: return code %d", thread_ret);
+                        sprintf(aux_log, "Unable to create thread: %d", thread_ret);
                         std_err(aux_log);
                         status = 1;
                 }
                 pthread_join(thread, NULL);
-        } else {
-                status = command_fire(sock);
-                if (status != 0) {
-                        std_err("Something went wrong while firing command request over socket.");
+#elif _WIN32
+                DWORD t_id;
+                HANDLE thread = CreateThread(NULL, 0, (void *) command_fire, (void *)(intptr_t) sock, 0, &t_id);
+                if (thread == INVALID_HANDLE_VALUE) {
+                        sprintf(aux_log, "Unable to create thread: %d.", thread);
+                        std_err(aux_log);
+                        status = 1;
+                } else {
+                        WaitForSingleObject(thread, INFINITE);
                 }
+#endif
+        } else {
+                command_fire(sock);
         }
 
         close_socket(sock);
+#ifdef _WIN32
+        WSACleanup();
+#endif
 
         if (status) {
                 exit(EXIT_FAILURE);

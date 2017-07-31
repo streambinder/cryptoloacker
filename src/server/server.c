@@ -2,29 +2,36 @@
 #include <dirent.h>
 #include <errno.h>
 #include <fcntl.h>
-#include <netinet/in.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
-#include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/types.h>
 #include <unistd.h>
 
+#ifdef __linux__
+#include <netinet/in.h>
+#include <string.h>
+#include <sys/socket.h>
+#elif _WIN32
+#include <inttypes.h>
+#include <winsock2.h>
+#pragma comment(lib, "ws2_32.lib")
+#endif
+
 #include "cipher.h"
+#include "threadpool.h"
 #include "opt.h"
 #include "server.h"
 #include "stringer.h"
-#include "threadpool.h"
 
 static threadpool_t threadpool;
-char aux_log[100];
-char *arg_folder;
-char *arg_config;
-int arg_port = 0;
-int arg_threads = 0;
-int exit_asked = 0;
+static char aux_log[100];
+static char *arg_folder;
+static char *arg_config;
+static int arg_port = 0;
+static int arg_threads = 0;
+static int exit_asked = 0;
 
 int inherit_configuration(char *config_file) {
         if (access(arg_config, F_OK) == -1) {
@@ -33,19 +40,14 @@ int inherit_configuration(char *config_file) {
                 return 1;
         } else {
                 FILE *config;
-                char *line = NULL;
-                size_t len = 0;
-                ssize_t read;
+                char line[1000];
 
                 config = fopen(config_file, "r");
                 if (config == NULL) {
                         return 1;
                 }
                 char *config_key, *config_value;
-                while ((read = getline(&line, &len, config)) != -1) {
-                        line[read-1] = 0;
-                        sprintf(aux_log, "config: line of lenght %zu: \"%s\"", read, line);
-                        std_out(aux_log);
+                while(fgets(line, 1000, config)) {
                         config_key = strtok(line, "=");
                         config_value = strtok(NULL, "=");
                         config_key = trim(config_key);
@@ -71,12 +73,10 @@ int inherit_configuration(char *config_file) {
                 }
 
                 fclose(config);
-                if (line) {
-                        free(line);
-                }
         }
 }
 
+#ifdef __linux__
 void sig_hup_handler(int sig) {
         if (sig == SIGHUP) {
                 std_out("SIGHUP: flushing configuration.");
@@ -93,13 +93,15 @@ void sig_int_handler(int sig) {
                 exit_asked = 1;
         }
 }
+#endif
 
 void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
+#ifdef __linux__
         char folder_abs[strlen(folder) + 2 + (folder_suffix != NULL ? strlen(folder_suffix) + 1 : 0)];
         if (folder_suffix == NULL) {
                 strcpy(folder_abs, folder);
         } else {
-                sprintf(folder_abs, "%s/%s", folder, folder_suffix); // superunix
+                sprintf(folder_abs, "%s/%s", folder, folder_suffix);
         }
         DIR *d = opendir(folder_abs);
         FILE *filename;
@@ -107,7 +109,7 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
         if (d) {
                 while ((dir = readdir(d)) != NULL) {
                         if (dir->d_type == DT_REG) {
-                                char *filename_path = calloc(strlen(folder_abs) + 2 + strlen(dir->d_name) + 1, sizeof(char)); // superunix
+                                char *filename_path = calloc(strlen(folder_abs) + 2 + strlen(dir->d_name) + 1, sizeof(char));
                                 sprintf(filename_path, "%s/%s", folder_abs, dir->d_name);
                                 filename = fopen(filename_path, "r");
                                 if (filename == NULL) {
@@ -138,13 +140,13 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
                                 if (filename_path != NULL) {
                                         free(filename_path);
                                 }
-                        } else if (dir->d_type == DT_DIR && recursive == LST_R && strcasecmp(dir->d_name, "..") != 0 && strcasecmp(dir->d_name, ".") != 0) { // superunix
+                        } else if (dir->d_type == DT_DIR && recursive == LST_R && strcasecmp(dir->d_name, "..") != 0 && strcasecmp(dir->d_name, ".") != 0) {
                                 char *folder_suffix_sub;
                                 if (folder_suffix == NULL) {
                                         folder_suffix_sub = calloc(strlen(dir->d_name) + 1, sizeof(char));
                                         strcpy(folder_suffix_sub, dir->d_name);
                                 } else {
-                                        folder_suffix_sub = calloc(strlen(folder_suffix) + 2 + strlen(dir->d_name) + 1, sizeof(char)); // superunix
+                                        folder_suffix_sub = calloc(strlen(folder_suffix) + 2 + strlen(dir->d_name) + 1, sizeof(char));
                                         sprintf(folder_suffix_sub, "%s/%s", folder_suffix, dir->d_name);
                                 }
                                 list_opt(ret_out, LST_R, folder, folder_suffix_sub);
@@ -155,23 +157,83 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
                 }
                 closedir(d);
         }
+#elif _WIN32
+        char folder_abs[strlen(folder) + 2 + (folder_suffix != NULL ? strlen(folder_suffix) + 1 : 0) + 3];
+        if (folder_suffix == NULL) {
+                sprintf(folder_abs, "%s\\*.*", folder);
+        } else {
+                sprintf(folder_abs, "%s\\%s\\*.*", folder, folder_suffix);
+        }
+        WIN32_FIND_DATA find_data;
+        HANDLE dir = FindFirstFile(folder_abs, &find_data);
+        if (dir == INVALID_HANDLE_VALUE) {
+                sprintf(aux_log, "Invalid handle value for dir \"%s\".", dir);
+                std_err(aux_log);
+        }
+        do {
+                if (!(find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)) {
+                        char *filename_path = calloc(strlen(folder_abs) + 2 + strlen(find_data.cFileName) + 1, sizeof(char));
+                        sprintf(filename_path, "%s\\%s", folder_abs, find_data.cFileName);
+                        char size_str[5];
+                        uint64_t size = (((uint64_t) find_data.nFileSizeHigh) << 32) | find_data.nFileSizeLow;
+                        sprintf(size_str, "%" PRIu64 " ", (uintmax_t) size);
+                        strcat(ret_out, size_str);
+                        if (strlen(size_str) < TAB_SIZE) {
+                                strcat(ret_out, "\t\t");
+                        } else {
+                                strcat(ret_out, "\t");
+                        }
+                        if (folder_suffix != NULL) {
+                                strcat(ret_out, folder_suffix);
+                                strcat(ret_out, "\\");
+                        }
+                        strcat(ret_out, find_data.cFileName);
+                        strcat(ret_out, "\r\n");
+                        if (filename_path != NULL) {
+                                free(filename_path);
+                        }
+                } else if ((find_data.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY) && recursive == LST_R
+                           && strcasecmp(find_data.cFileName, "..") != 0
+                           && strcasecmp(find_data.cFileName, ".") != 0) {
+                        char *folder_suffix_sub;
+                        if (folder_suffix == NULL) {
+                                folder_suffix_sub = calloc(strlen(find_data.cFileName) + 1, sizeof(char));
+                                strcpy(folder_suffix_sub, find_data.cFileName);
+                        } else {
+                                folder_suffix_sub = calloc(strlen(folder_suffix) + 2 + strlen(find_data.cFileName) + 1, sizeof(char));
+                                sprintf(folder_suffix_sub, "%s\\%s", folder_suffix, find_data.cFileName);
+                        }
+                        list_opt(ret_out, LST_R, folder, folder_suffix_sub);
+                        if (folder_suffix_sub) {
+                                free(folder_suffix_sub);
+                        }
+                }
+        } while (FindNextFile(dir, &find_data));
+        FindClose(dir);
+#endif
 }
 
 void list(char *ret_out, int recursive) {
         list_opt(ret_out, recursive, arg_folder, NULL);
 }
 
-int create_socket(int port) {
+sock_t create_socket(int port) {
         std_out("Allocating variables.");
-        int sock, status;
+        sock_t sock;
         struct sockaddr_in sock_conf;
+        int status;
 
         sprintf(aux_log, "Initializing socket on 0.0.0.0:%d", port);
         std_out(aux_log);
         sock = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef __linux__
         int enable = 1;
         if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &enable, sizeof(int)) < 0) {
                 std_err("setsockopt(SO_REUSEADDR) failed.");
+#elif _WIN32
+        if (sock == INVALID_SOCKET) {
+                std_err("Unable to initialize socket.");
+#endif
                 exit(EXIT_FAILURE);
         }
 
@@ -179,7 +241,12 @@ int create_socket(int port) {
         sock_conf.sin_addr.s_addr = INADDR_ANY;
         sock_conf.sin_port = htons(port);
 
+#ifdef __linux__
         status = fcntl(sock, F_SETFL, O_NONBLOCK);
+#elif _WIN32
+        u_long sock_nonblock = 1;
+        status = ioctlsocket(sock, FIONBIO, &sock_nonblock);
+#endif
         if (status != 0) {
                 sprintf(aux_log, "Error %d manipulating socket file descriptor.", status);
                 std_err(aux_log);
@@ -188,7 +255,11 @@ int create_socket(int port) {
 
         std_out("Binding socket.");
         status = bind(sock,(struct sockaddr*) &sock_conf, sizeof(sock_conf));
+#ifdef __linux__
         if (status != 0) {
+#elif _WIN32
+        if (status == SOCKET_ERROR) {
+#endif
                 sprintf(aux_log, "Error %d binding socket.", status);
                 std_err(aux_log);
                 exit(EXIT_FAILURE);
@@ -205,13 +276,17 @@ int create_socket(int port) {
         return sock;
 }
 
-void close_socket(int sock) {
+void close_socket(sock_t sock) {
         sprintf(aux_log, "Closing socket.");
         std_sck(sock, aux_log);
+#ifdef __linux__
         close(sock);
+#elif _WIN32
+        closesocket(sock);
+#endif
 }
 
-int write_socket(int sock, char *message, int last) {
+int write_socket(sock_t sock, char *message, int last) {
         int status;
         const char *suffix = &message[strlen(message)-2];
         if (strcasecmp(suffix, "\r\n") != 0) {
@@ -220,7 +295,11 @@ int write_socket(int sock, char *message, int last) {
         if (last) {
                 strcat(message, ".\r\n");
         }
+#ifdef __linux__
         if ((status = write(sock, message, strlen(message) + 1)) < 0) {
+#elif _WIN32
+        if ((status = send(sock, message, strlen(message), 0)) < 0) {
+#endif
                 sprintf(aux_log, "Unable to send message.");
                 std_sck(sock, aux_log);
                 return -1;
@@ -229,18 +308,24 @@ int write_socket(int sock, char *message, int last) {
 }
 
 void handle_connection(void *incoming_conn) {
-        int sock = *((int *) incoming_conn);
+        sock_t sock = *((sock_t *) incoming_conn);
         free(incoming_conn);
 
         char buffer[512+1];
-        int packet_length;
+        int packet_length = 0;
         int packet_empty = 0;
         buffer[512] = 0;
         for (;; ) {
-                if ((packet_length = read(sock, buffer, 512)) < 0) {
-                        std_sck(sock, "Unable to read message.");
-                        break;
+                packet_length = recv(sock, buffer, 512, 0);
+#ifdef __linux__
+                if (packet_length < 0) {
+#elif _WIN32
+                if (packet_length == SOCKET_ERROR) {
+#endif
+                        sprintf(aux_log, "Unable to read message.");
+                        std_sck(sock, aux_log);
                 } else {
+                        buffer[packet_length] = '\0';
                         if (packet_length <= 2) {
                                 packet_empty++;
                                 sprintf(aux_log, "Packet too small (%d).", packet_empty+1);
@@ -304,10 +389,18 @@ void handle_connection(void *incoming_conn) {
                                 char enc_path_from[strlen(arg_folder) + 1 + strlen(enc_path)];
                                 char enc_path_to[strlen(arg_folder) + 1 + strlen(enc_path) + 4];
                                 if (strcasecmp(command, CMD_ENCR) == 0) {
-                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path); // superunix
+#ifdef __linux__
+                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path);
+#elif _WIN32
+                                        sprintf(enc_path_from, "%s\\%s", arg_folder, enc_path);
+#endif
                                         sprintf(enc_path_to, "%s_enc", enc_path_from);
                                 } else {
-                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path); // superunix
+#ifdef __linux__
+                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path);
+#elif _WIN32
+                                        sprintf(enc_path_from, "%s\\%s", arg_folder, enc_path);
+#endif
                                         sprintf(enc_path_to, "%s", enc_path_from);
                                         enc_path_to[strlen(enc_path_to) - 4] = 0;
                                 }
@@ -414,6 +507,7 @@ int main(int argc, char *argv[]) {
         std_out(aux_log);
         threadpool_init(&threadpool, arg_threads);
 
+#ifdef __linux__
         std_out("Configuring SIGHUP signals catching.");
         if (signal(SIGHUP, sig_hup_handler) == SIG_ERR) {
                 std_err("Unable to handle SIGHUP.");
@@ -423,15 +517,24 @@ int main(int argc, char *argv[]) {
         if (signal(SIGINT, sig_int_handler) == SIG_ERR) {
                 std_err("Unable to handle SIGINT.");
         }
+#elif _WIN32
+        WSADATA wsa;
+        std_out("Initializing WinSock.");
+        if (WSAStartup(MAKEWORD(2,2), &wsa) != 0) {
+                sprintf(aux_log, "Initialization failed. Code: %d.", WSAGetLastError());
+                std_err(aux_log);
+                exit(EXIT_FAILURE);
+        }
+#endif
 
-        int sock_passive;
+        sock_t sock_passive;
         int exit_condition = 0;
 
         sock_passive = create_socket(arg_port);
 
         std_out("Waiting for connections.");
         for (;; ) {
-                int sock_active;
+                sock_t sock_active;
                 if (exit_asked) {
                         break;
                 }
@@ -447,6 +550,9 @@ int main(int argc, char *argv[]) {
         threadpool_bye(&threadpool);
 
         close_socket(sock_passive);
+#ifdef _WIN32
+        WSACleanup();
+#endif
         std_out("Exited.");
 
         return 0;

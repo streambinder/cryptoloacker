@@ -13,7 +13,7 @@
 #include "cipher.h"
 #include "opt.h"
 
-char aux_log[250];
+static char aux_log[250];
 
 int cipher(char *input_file, char *output_file, unsigned int seed) {
         // input file
@@ -136,11 +136,11 @@ int cipher(char *input_file, char *output_file, unsigned int seed) {
                 std_err(aux_log);
         }
 
-        if (input != NULL) {
+        if (&input != NULL) {
                 close(input);
         }
 
-        if (output != NULL) {
+        if (&output != NULL) {
                 close(output);
         }
 

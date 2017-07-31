@@ -1,4 +1,5 @@
 #include <stdio.h>
+#include <stdlib.h>
 
 #ifdef __linux__
 #include <pthread.h>
@@ -7,9 +8,9 @@
 #endif
 
 #include "threadpool.h"
-#include "../../../common/opt.h"
+#include "opt.h"
 
-char aux_log[100];
+static char aux_log[100];
 
 #ifdef __linux__
 static void* thread_boot(void *args) {
@@ -84,7 +85,7 @@ int threadpool_init(threadpool_t *threadpool, int max) {
 #endif
         for (int i = 0; i < max; i++) {
 #ifdef __linux__
-                int status = pthread_create(threadpool->threads[i], NULL, &thread_boot, threadpool);
+                int status = pthread_create(&threadpool->threads[i], NULL, &thread_boot, threadpool);
                 if (status != 0) {
 #elif _WIN32
                 DWORD t_id;

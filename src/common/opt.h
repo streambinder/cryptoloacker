@@ -3,6 +3,10 @@
 
 #define NAME "CRYPTOLOACKER"
 
+#ifdef __linux__
+
+typedef int sock_t;
+
 #define ANSI_COLOR_RED     "\x1b[31m"
 #define ANSI_COLOR_GREEN   "\x1b[32m"
 #define ANSI_COLOR_YELLOW  "\x1b[33m"
@@ -11,6 +15,24 @@
 #define ANSI_COLOR_CYAN    "\x1b[36m"
 #define ANSI_COLOR_GREY    "\x1b[37m"
 #define ANSI_COLOR_RESET   "\x1b[0m"
+
+#elif _WIN32
+
+typedef SOCKET sock_t;
+
+#define ANSI_COLOR_RED     ""
+#define ANSI_COLOR_GREEN   ""
+#define ANSI_COLOR_YELLOW  ""
+#define ANSI_COLOR_BLUE    ""
+#define ANSI_COLOR_MAGENTA ""
+#define ANSI_COLOR_CYAN    ""
+#define ANSI_COLOR_GREY    ""
+#define ANSI_COLOR_RESET   ""
+
+#define EXIT_FAILURE    1
+#define EXIT_SUCCESS    0
+
+#endif
 
 #define CMD_EXIT "EXIT"
 #define CMD_LSTF "LSTF"
@@ -23,8 +45,8 @@
 #define CMD_NOK 400
 #define CMD_TRNS_NOK 500
 
-#define std_out(arg)        fprintf(stdout, ANSI_COLOR_GREEN    "%s    "    ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
-#define std_err(arg)        fprintf(stderr, ANSI_COLOR_RED      "%s    "    ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
-#define std_sck(sock, arg)  fprintf(stderr, ANSI_COLOR_CYAN     "%s (%d)"   ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, sock, arg)
+#define std_out(arg)        fprintf(stdout, ANSI_COLOR_GREEN    "%s    "  ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
+#define std_err(arg)        fprintf(stderr, ANSI_COLOR_RED      "%s    "  ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, arg)
+#define std_sck(sock, arg)  fprintf(stderr, ANSI_COLOR_CYAN     "%s (%d)" ANSI_COLOR_GREY " > " ANSI_COLOR_RESET "%s\n", NAME, sock, arg)
 
 #endif // OPT_H
