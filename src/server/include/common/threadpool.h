@@ -1,59 +1,43 @@
 #ifndef THREADPOOL_H
 #define THREADPOOL_H
 
-typedef struct sem {
-        pthread_mutex_t mutex;
-        pthread_cond_t cond;
-        int v;
-} sem;
+#ifdef __linux__
+typedef pthread_t thread_t;
+#elif _WIN32
+typedef HANDLE thread_t;
+#endif
 
-typedef struct job {
-        struct job* prev;
-        void (*function)(void* arg);
-        void* arg;
-} job;
+#ifdef __linux__
+typedef pthread_mutex_t mutex_t;
+#elif _WIN32
+typedef SRWLOCK mutex_t;
+#endif
 
-typedef struct jobqueue {
-        pthread_mutex_t rwmutex;
-        job *front;
-        job *rear;
-        sem *has_jobs;
-        int len;
-} jobqueue;
+#ifdef __linux__
+typedef pthread_cond_t condition_variable_t;
+#elif _WIN32
+typedef CONDITION_VARIABLE condition_variable_t;
+#endif
 
-typedef struct thread {
-        int id;
-        pthread_t pthread;
-        struct threadpool* thpool;
-} thread;
+typedef struct job_t {
+        struct job_t *next;
+        void (*function)(void *);
+        void *params;
+} job_t;
 
-typedef struct threadpool {
-        thread** threads;
-        volatile int num_threads_alive;
-        volatile int num_threads_working;
-        pthread_mutex_t thcount_lock;
-        pthread_cond_t threads_all_idle;
-        jobqueue jobqueue;
-} threadpool;
+typedef struct {
+        int size_jobs;
+        int size_threads;
+        thread_t *threads;
+        job_t *top;
+        job_t *bottom;
+        mutex_t mutex;
+        condition_variable_t condition_variable;
+        int bye;
+} threadpool_t;
 
-threadpool* thpool_init(int num_threads);
-int thpool_add_work(threadpool*, void (*function_p)(void*), void* arg_p);
-void thpool_wait(threadpool*);
-void thpool_destroy(threadpool*);
-int thpool_num_threads_working(threadpool*);
-int thread_init(threadpool* thpool, struct thread** thread_p, int id);
-void* thread_do(struct thread* thread_p);
-void thread_hold(int sig_id);
-void thread_destroy(struct thread* thread_p);
-int jobqueue_init(jobqueue* jobqueue_p);
-void jobqueue_clear(jobqueue* jobqueue_p);
-void jobqueue_push(jobqueue* jobqueue_p, struct job* newjob_p);
-struct job* jobqueue_pull(jobqueue* jobqueue_p);
-void jobqueue_destroy(jobqueue* jobqueue_p);
-void sem_init(struct sem *sem_p, int value);
-void sem_reset(struct sem *sem_p);
-void sem_post(struct sem *sem_p);
-void sem_post_all(struct sem *sem_p);
-void sem_wait(struct sem *sem_p);
+int threadpool_init(threadpool_t *threadpool, int max);
+int threadpool_add_job(threadpool_t *threadpool, void (*function)(void *), void *params);
+int threadpool_bye(threadpool_t *threadpool);
 
 #endif // THREADPOOL_H

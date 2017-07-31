@@ -18,7 +18,7 @@
 #include "stringer.h"
 #include "threadpool.h"
 
-threadpool *thpool;
+static threadpool_t threadpool;
 char aux_log[100];
 char *arg_folder;
 char *arg_config;
@@ -228,7 +228,10 @@ int write_socket(int sock, char *message, int last) {
         return 0;
 }
 
-void handle_connection(int sock) {
+void handle_connection(void *incoming_conn) {
+        int sock = *((int *) incoming_conn);
+        free(incoming_conn);
+
         char buffer[512+1];
         int packet_length;
         int packet_empty = 0;
@@ -409,7 +412,7 @@ int main(int argc, char *argv[]) {
 
         sprintf(aux_log, "Creating threadpool by %d.", arg_threads);
         std_out(aux_log);
-        thpool = thpool_init(arg_threads);
+        threadpool_init(&threadpool, arg_threads);
 
         std_out("Configuring SIGHUP signals catching.");
         if (signal(SIGHUP, sig_hup_handler) == SIG_ERR) {
@@ -435,12 +438,13 @@ int main(int argc, char *argv[]) {
                 if ((sock_active = accept(sock_passive, 0, 0)) != -1) {
                         sprintf(aux_log, "Welcomed new connection: %d.", sock_active);
                         std_out(aux_log);
-                        thpool_add_work(thpool, (void*) handle_connection, (void *)(intptr_t) sock_active);
+                        int *sock_incoming = malloc(sizeof(int));
+                        *sock_incoming = sock_active;
+                        threadpool_add_job(&threadpool, &handle_connection, sock_incoming);
                 }
         }
 
-        thpool_wait(thpool);
-        thpool_destroy(thpool);
+        threadpool_bye(&threadpool);
 
         close_socket(sock_passive);
         std_out("Exited.");
