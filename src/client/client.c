@@ -22,8 +22,6 @@ char aux_log[100];
 char *arg_host;
 char *arg_command;
 
-FILE *log_file;
-
 int send_message(int sock, char *message) {
         strcat(message, "\r\n");
         if (write(sock, message, strlen(message)) < 0) {
@@ -75,8 +73,16 @@ int command_fire(int sock) {
                 return status;
         }
 
-        if (log_file != NULL && command_log) {
+        if (command_log) {
+                FILE *log_file = fopen(LOG_FILE, "a");
+                if (log_file == NULL) {
+                        sprintf(aux_log, "Unable to open log %s.", LOG_FILE);
+                        std_err(aux_log);
+                        exit(EXIT_FAILURE);
+                }
                 fprintf(log_file, "%s", arg_command);
+                fflush(log_file);
+                fclose(log_file);
         }
 
         char server_reply[5000];
@@ -160,21 +166,6 @@ int main(int argc, char *argv[]) {
                 exit(EXIT_FAILURE);
         }
 
-        // sprintf(aux_log, "Config { host=\"%s\", port=%d, command=\"%s\" }", arg_host, arg_port, arg_command);
-        // std_out(aux_log);
-
-        if (command_log) {
-                log_file = fopen(LOG_FILE, "a");
-                if (log_file == NULL) {
-                        sprintf(aux_log, "Unable to open log %s.", LOG_FILE);
-                        std_err(aux_log);
-                        exit(EXIT_FAILURE);
-                } else {
-                        // sprintf(aux_log, "Logging to %s.", LOG_FILE);
-                        // std_out(aux_log);
-                }
-        }
-
         sock = create_socket(arg_host, 8888);
         if (sock == -1) {
                 std_err("Something went wrong while instanciating socket. Exiting.");
@@ -199,16 +190,6 @@ int main(int argc, char *argv[]) {
         }
 
         close_socket(sock);
-
-        if (log_file != NULL) {
-                fclose(log_file);
-        }
-        if (arg_host != NULL) {
-                free(arg_host);
-        }
-        if (arg_command != NULL) {
-                free(arg_command);
-        }
 
         if (status) {
                 exit(EXIT_FAILURE);

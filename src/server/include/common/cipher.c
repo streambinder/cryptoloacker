@@ -1,3 +1,4 @@
+#include <errno.h>
 #include <fcntl.h>
 #include <math.h>
 #include <inttypes.h>
@@ -30,13 +31,13 @@ int cipher(char *input_file, char *output_file, unsigned int seed) {
                 return CMD_NOK;
         }
         struct flock lock;
-        lock.l_type = F_WRLCK;
+        lock.l_type = F_RDLCK;
         lock.l_whence = SEEK_SET;
         lock.l_start = 0;
         lock.l_len = input_size;
         lock.l_pid = getpid();
         if(fcntl(input, F_SETLK, &lock)) {
-                sprintf(aux_log, "Unable to get lock on input file \"%s\".", input_file);
+                sprintf(aux_log, "Unable to get lock on input file \"%s\": %d.", input_file, errno);
                 std_err(aux_log);
                 close(input);
                 return CMD_TRNS_NOK;
@@ -129,15 +130,18 @@ int cipher(char *input_file, char *output_file, unsigned int seed) {
                 std_err("Something wrong while memory-unmapping key map.");
         }
 
-        struct flock lock;
         lock.l_type = F_UNLCK;
-        lock.l_whence = SEEK_SET;
-        lock.l_start = 0;
-        lock.l_len = input_size;
-        lock.l_pid = getpid();
         if(fcntl(input, F_SETLK, &lock)) {
                 sprintf(aux_log, "Unable to release lock on input file \"%s\".", input_file);
                 std_err(aux_log);
+        }
+
+        if (input != NULL) {
+                close(input);
+        }
+
+        if (output != NULL) {
+                close(output);
         }
 
         return CMD_CPH_OK;
