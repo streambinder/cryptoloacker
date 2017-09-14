@@ -117,11 +117,14 @@ void list_opt(char *ret_out, int recursive, char *folder, char *folder_suffix) {
                                         std_err(aux_log);
                                         continue;
                                 }
-                                fseek(filename, 0, SEEK_END);
-                                int size = ftell(filename);
-                                fseek(filename, 0, SEEK_SET);
+                                struct stat filename_stat;
+                                if (fstat(fileno(filename), &filename_stat) == -1) {
+                                        sprintf(aux_log, "Unable to read file \"%s\" stat.", filename_path);
+                                        std_err(aux_log);
+                                        continue;
+                                }
                                 char size_str[5];
-                                sprintf(size_str, "%d", size);
+                                sprintf(size_str, "%d", filename_stat.st_size);
                                 strcat(ret_out, size_str);
                                 if (strlen(size_str) < TAB_SIZE) {
                                         strcat(ret_out, "\t\t");
@@ -296,7 +299,7 @@ int write_socket(sock_t sock, char *message, int last) {
                 strcat(message, ".\r\n");
         }
 #ifdef __linux__
-        if ((status = write(sock, message, strlen(message) + 1)) < 0) {
+        if ((status = write(sock, message, strlen(message))) < 0) {
 #elif _WIN32
         if ((status = send(sock, message, strlen(message), 0)) < 0) {
 #endif
@@ -390,16 +393,16 @@ void handle_connection(void *incoming_conn) {
                                 char enc_path_to[strlen(arg_folder) + 1 + strlen(enc_path) + 4];
                                 if (strcasecmp(command, CMD_ENCR) == 0) {
 #ifdef __linux__
-                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path);
+                                        sprintf(enc_path_from, "%s/%s\0", arg_folder, enc_path);
 #elif _WIN32
-                                        sprintf(enc_path_from, "%s\\%s", arg_folder, enc_path);
+                                        sprintf(enc_path_from, "%s\\%s\0", arg_folder, enc_path);
 #endif
-                                        sprintf(enc_path_to, "%s_enc", enc_path_from);
+                                        sprintf(enc_path_to, "%s_enc\0", enc_path_from);
                                 } else {
 #ifdef __linux__
-                                        sprintf(enc_path_from, "%s/%s", arg_folder, enc_path);
+                                        sprintf(enc_path_from, "%s/%s\0", arg_folder, enc_path);
 #elif _WIN32
-                                        sprintf(enc_path_from, "%s\\%s", arg_folder, enc_path);
+                                        sprintf(enc_path_from, "%s\\%s\0", arg_folder, enc_path);
 #endif
                                         sprintf(enc_path_to, "%s", enc_path_from);
                                         enc_path_to[strlen(enc_path_to) - 4] = 0;
@@ -438,7 +441,6 @@ void handle_connection(void *incoming_conn) {
                                 sprintf(ret_out, "Command not recognized.");
                                 write_socket(sock, ret_out, 1);
                         }
-
                         // buffer cleanup
                         for (int index = 0; index < 512; index++) {
                                 buffer[index] = 0;

@@ -131,8 +131,9 @@ void command_fire(sock_t sock) {
                 server_reply[server_reply_size] = '\0';
                 printf("%s", server_reply);
 
-                const char *suffix = &server_reply[strlen(server_reply)-5];
-                if (strcasecmp(suffix, "\r\n.\r\n") == 0) {
+                //const char *suffix = &server_reply[strlen(server_reply)-5];
+                //if (strcasecmp(suffix, "\r\n.\r\n") == 0) {
+                if (strstr(server_reply, "\r\n.\r\n")) {
                         break;
                 }
         }
@@ -154,8 +155,9 @@ int main(int argc, char *argv[]) {
                         command_threaded = 1;
                         command_log = 1;
                         if ((i+2) < argc) {
-                                arg_command = calloc(strlen(CMD_ENCR) + 1 + strlen(argv[i+1]) + strlen(argv[i+2]), sizeof(char));
+                                arg_command = calloc(strlen(CMD_ENCR) + 1 + strlen(argv[i+1]) + 2 + strlen(argv[i+2]), sizeof(char));
                                 sprintf(arg_command, "%s %s %s", (strcasecmp(argv[i], "-e") == 0) ? CMD_ENCR : CMD_DECR, argv[i+1], argv[i+2]);
+                                arg_command[strlen(arg_command)] = 0;
                         } else {
                                 sprintf(aux_log, "Malformed %s input.", argv[i]);
                                 std_err(aux_log);
